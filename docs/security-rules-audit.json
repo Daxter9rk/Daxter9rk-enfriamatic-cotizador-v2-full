@@ -1,0 +1,36 @@
+{
+  "score": 4,
+  "summary": "APROBADO tras corregir el cruce de alcance entre cotizaciones, solicitudes y Cloud Functions. Firestore aplica deny-by-default, perfiles backend-only, roles literales, estado activo, ACL y ownership; Storage rechaza todo acceso cliente. Persiste un riesgo menor de consumo por cantidad no acotada de documentos item dentro de un borrador autorizado.",
+  "findings": [
+    {
+      "check": "Authority Source / acceso directo mediante IDs conocidos",
+      "severity": "major",
+      "issue": "Resuelto: un operador podía crear una cotización para una solicitud propia sustituyendo clientId, siteId o equipmentId. Al emitirla por una Function con Admin SDK, esos IDs podían incorporar datos de otro cliente al PDF.",
+      "recommendation": "Aplicado: Firestore exige que ownership y relaciones coincidan con la solicitud; issueQuote vuelve a comprobar las relaciones y la asignación antes de leer maestros o generar el PDF."
+    },
+    {
+      "check": "Field-Level vs. Identity-Level Security",
+      "severity": "major",
+      "issue": "Resuelto: los callables validaban la asignación actual de la solicitud, pero no siempre la asignación persistida en la cotización. Una reasignación y un ID conocido podían producir una autorización inconsistente.",
+      "recommendation": "Aplicado: issueQuote, createCorrection y downloadQuotePdf requieren para operadores coincidencia simultánea entre actor, quote.assignedTo y request.assignedTo."
+    },
+    {
+      "check": "The Update Bypass / campos backend-only",
+      "severity": "moderate",
+      "issue": "Resuelto: un cliente autorizado podía crear un borrador con originalQuoteId, revisionNumber, issuedBy o issuanceKey predefinidos, falseando metadatos de corrección o emisión aunque no pudiera emitir por reglas.",
+      "recommendation": "Aplicado: todo borrador cliente inicia con revisión 1, sin corrección, emisión, vigencia ni llave de idempotencia; los campos quedan inmutables después."
+    },
+    {
+      "check": "Acceso directo mediante IDs conocidos",
+      "severity": "minor",
+      "issue": "Resuelto: settings permitía get de cualquier ID a usuarios activos, incluso si una futura Function almacenaba configuración interna bajo esa colección.",
+      "recommendation": "Aplicado: operadores sólo pueden leer companyProfile y quoteDefaults; los documentos desconocidos quedan denegados."
+    },
+    {
+      "check": "Storage Abuse / Resource Exhaustion",
+      "severity": "minor",
+      "issue": "Residual: un admin u operador autorizado para un borrador puede crear muchos documentos en quotes/{quoteId}/items. Cada documento tiene esquema, tipos y tamaños acotados, y la emisión procesa como máximo 100, pero Rules no puede contar de forma segura toda la subcolección.",
+      "recommendation": "Antes de exposición amplia, aplicar App Check, presupuestos/alertas y, si el riesgo operativo lo exige, mover las mutaciones de partidas a una Function transaccional que mantenga un contador máximo."
+    }
+  ]
+}
