@@ -11,7 +11,7 @@ const operator = {
 };
 
 async function login(page: Page, credentials = admin) {
-  await page.goto('/');
+  await page.goto('/', {waitUntil: 'domcontentloaded'});
   await expect(page.getByRole('heading', {name: /cotizaciones técnicas/i})).toBeVisible();
   await page.getByTestId('login-email').fill(credentials.email);
   await page.getByTestId('login-password').fill(credentials.password);
@@ -24,11 +24,7 @@ async function logout(page: Page) {
   await expect(page.getByTestId('login-submit')).toBeVisible();
 }
 
-test('flujo integral admin → operador → PDF → auditoría → corrección', async ({page}, testInfo) => {
-  test.skip(
-    testInfo.project.name !== 'desktop-chromium',
-    'El flujo mutante se ejecuta una sola vez.',
-  );
+test('flujo integral admin → operador → PDF → auditoría → corrección', async ({page}) => {
   const suffix = String(Date.now()).slice(-7);
   const clientName = `Cliente E2E ${suffix}`;
   const siteName = `Planta E2E ${suffix}`;
