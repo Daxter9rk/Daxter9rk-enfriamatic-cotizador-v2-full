@@ -9,7 +9,7 @@ export default defineConfig({
   timeout: 60_000,
   globalTimeout: isCI ? 10 * 60_000 : undefined,
   expect: {timeout: 10_000},
-  retries: isCI ? 1 : 0,
+  retries: 0,
   reporter: [['list'], ['html', {open: 'never'}]],
   use: {
     baseURL: 'http://127.0.0.1:5000',

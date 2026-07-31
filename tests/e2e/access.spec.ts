@@ -55,6 +55,7 @@ test('logout and browser back do not restore private content', async ({page}) =>
 
 test('unknown authenticated route renders a safe 404', async ({page}) => {
   await submitLogin(page, 'admin@enfriamatic.local');
+  await expect(page.getByText(/centro de operación/i)).toBeVisible();
   await page.goto('/ruta-inexistente', {waitUntil: 'domcontentloaded'});
   await expect(page.getByRole('heading', {name: 'Ruta no encontrada'})).toBeVisible();
 });
