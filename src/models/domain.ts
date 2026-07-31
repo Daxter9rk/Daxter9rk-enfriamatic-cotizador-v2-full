@@ -1,0 +1,191 @@
+import type {Timestamp} from 'firebase/firestore';
+
+export type UserRole = 'admin' | 'operator';
+export type UserStatus = 'active' | 'inactive' | 'pending' | 'suspended';
+export type RequestStatus = 'pending' | 'assigned' | 'in_progress' | 'completed' | 'cancelled';
+export type QuoteStatus =
+  | 'draft'
+  | 'issued'
+  | 'sent'
+  | 'accepted'
+  | 'rejected'
+  | 'cancelled'
+  | 'expired';
+export type DocumentStatus = 'not_generated' | 'generating' | 'ready' | 'failed';
+export type DiscountDisplayMode = 'detailed' | 'summary' | 'incorporated';
+
+export interface AuditFields {
+  createdAt: Timestamp;
+  createdBy: string;
+  updatedAt: Timestamp;
+  updatedBy: string;
+  schemaVersion: number;
+}
+
+export interface Address {
+  street: string;
+  exteriorNumber?: string;
+  interiorNumber?: string;
+  neighborhood?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+}
+
+export interface UserProfile {
+  uid: string;
+  email: string;
+  displayName: string;
+  role: UserRole;
+  status: UserStatus;
+  createdAt: Timestamp;
+  createdBy: string | null;
+  updatedAt: Timestamp;
+  updatedBy: string | null;
+  lastLoginAt?: Timestamp | null;
+  schemaVersion: number;
+}
+
+export interface Client extends AuditFields {
+  id: string;
+  name: string;
+  legalName?: string;
+  rfc?: string;
+  contactName?: string;
+  email?: string;
+  phone?: string;
+  billingAddress?: Address;
+  status: 'active' | 'inactive';
+  notes?: string;
+}
+
+export interface Site extends AuditFields {
+  id: string;
+  clientId: string;
+  name: string;
+  type?: 'plant' | 'ranch' | 'branch' | 'warehouse' | 'other';
+  address: Address;
+  contactName?: string;
+  contactPhone?: string;
+  status: 'active' | 'inactive';
+}
+
+export interface Equipment extends AuditFields {
+  id: string;
+  clientId: string;
+  siteId: string;
+  name: string;
+  category: string;
+  brand?: string;
+  model?: string;
+  serialNumber?: string;
+  capacity?: string;
+  refrigerant?: string;
+  technicalNotes?: string;
+  status: 'active' | 'inactive' | 'retired';
+}
+
+export interface ServiceRequest extends AuditFields {
+  id: string;
+  clientId: string;
+  siteId: string;
+  equipmentId?: string | null;
+  title: string;
+  description: string;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  status: RequestStatus;
+  assignedTo?: string | null;
+  assignedAt?: Timestamp | null;
+  completedAt?: Timestamp | null;
+  correctionOfRequestId?: string | null;
+  correctionOfQuoteId?: string | null;
+}
+
+export interface Quote extends AuditFields {
+  id: string;
+  folio: string;
+  requestId: string;
+  assignedTo?: string | null;
+  clientId: string;
+  siteId: string;
+  equipmentId?: string | null;
+  status: QuoteStatus;
+  documentStatus: DocumentStatus;
+  currency: 'MXN';
+  taxRate: number;
+  discountDisplayMode: DiscountDisplayMode;
+  subtotalOriginal: number;
+  discountTotal: number;
+  subtotalFinal: number;
+  taxTotal: number;
+  grandTotal: number;
+  notes?: string;
+  validityDays: number;
+  validUntil?: Timestamp | null;
+  issuedAt?: Timestamp | null;
+  issuedBy?: string | null;
+  originalQuoteId?: string | null;
+  revisionNumber: number;
+  locked: boolean;
+}
+
+export interface QuoteItem {
+  id: string;
+  position: number;
+  catalogItemId?: string | null;
+  quantity: number;
+  unit: string;
+  equipmentOrService?: string;
+  brand?: string;
+  model?: string;
+  description: string;
+  originalUnitPrice: number;
+  discountType: 'none' | 'percentage' | 'fixed';
+  discountValue: number;
+  discountAmount: number;
+  finalUnitPrice: number;
+  lineSubtotal: number;
+  taxable: boolean;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export interface Notification {
+  id: string;
+  userId: string;
+  type: string;
+  title: string;
+  message: string;
+  resourceType?: string;
+  resourceId?: string;
+  read: boolean;
+  createdAt: Timestamp;
+  readAt?: Timestamp | null;
+}
+
+export interface AuditLog {
+  id: string;
+  actorId: string;
+  actorRole: UserRole;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  requestId?: string | null;
+  quoteId?: string | null;
+  before?: Record<string, unknown> | null;
+  after?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown>;
+  createdAt: Timestamp;
+}
+
+export type AuthState =
+  | 'loading'
+  | 'anonymous'
+  | 'missing-profile'
+  | 'inactive'
+  | 'pending'
+  | 'suspended'
+  | 'invalid-role'
+  | 'authenticated'
+  | 'error';
