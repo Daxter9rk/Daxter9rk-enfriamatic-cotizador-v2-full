@@ -1,0 +1,723 @@
+rules_version = '2';
+
+// =============================================================================
+// Assumed data model
+// =============================================================================
+// users/{uid}: private identity/profile; Admin SDK is the only writer.
+// clients/{id}, sites/{id}, equipment/{id}: master data with assignment ACL
+//   operatorIds. Admin creates/updates; assigned operators may read.
+// requests/{id}: admin creates/assigns; assigned operator advances workflow.
+// quotes/{id}: authorized users edit only unlocked drafts. Backend issues/locks.
+// quotes/{id}/items/{id}: draft line items; bounded and schema validated.
+// catalogs/{id}, settings/{knownId}: admin managed; active users read.
+// notifications/{id}: backend creates; owner may only mark read.
+// auditLogs/{id}, documents/{quoteId}, counters/{id}: backend writes only.
+// All operational documents use timestamps and schemaVersion 1.
+// =============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // -------------------------------------------------------------------------
+    // Identity and authorization helpers
+    // -------------------------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function profilePath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function profile() {
+      return get(profilePath()).data;
+    }
+
+    function isActiveUser() {
+      return isSignedIn()
+        && exists(profilePath())
+        && profile().status == 'active'
+        && profile().role in ['admin', 'operator'];
+    }
+
+    function isAdmin() {
+      return isActiveUser() && profile().role == 'admin';
+    }
+
+    function isOperator() {
+      return isActiveUser() && profile().role == 'operator';
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function boundedList(maximum) {
+      return request.query.limit != null && request.query.limit <= maximum;
+    }
+
+    // -------------------------------------------------------------------------
+    // Reusable type, size, audit, and state validators
+    // -------------------------------------------------------------------------
+    function validString(value, minimum, maximum) {
+      return value is string
+        && value.size() >= minimum
+        && value.size() <= maximum;
+    }
+
+    function validOptionalString(data, field, maximum) {
+      return !(field in data)
+        || (data[field] is string && data[field].size() <= maximum);
+    }
+
+    function validNullableString(data, field, maximum) {
+      return !(field in data)
+        || data[field] == null
+        || (data[field] is string && data[field].size() <= maximum);
+    }
+
+    function validNullableTimestamp(data, field) {
+      return !(field in data)
+        || data[field] == null
+        || data[field] is timestamp;
+    }
+
+    function validCreateAudit(data) {
+      return data.createdAt == request.time
+        && data.createdBy == request.auth.uid
+        && data.updatedAt == request.time
+        && data.updatedBy == request.auth.uid
+        && data.schemaVersion == 1;
+    }
+
+    function validUpdateAudit(data) {
+      return data.createdAt == resource.data.createdAt
+        && data.createdBy == resource.data.createdBy
+        && data.updatedAt == request.time
+        && data.updatedBy == request.auth.uid
+        && data.schemaVersion == resource.data.schemaVersion
+        && data.schemaVersion == 1;
+    }
+
+    function validOperatorAcl(data) {
+      return data.operatorIds is list && data.operatorIds.size() <= 100;
+    }
+
+    function canReadMasterData(data) {
+      let userProfile = get(profilePath()).data;
+      return isSignedIn()
+        && userProfile.status == 'active'
+        && (
+          userProfile.role == 'admin'
+          || (
+            userProfile.role == 'operator'
+            && request.auth.uid in data.operatorIds
+          )
+        );
+    }
+
+    function validAddress(address) {
+      return address is map
+        && address.keys().hasAll([
+          'street', 'city', 'state', 'postalCode', 'country'
+        ])
+        && address.keys().hasOnly([
+          'street', 'exteriorNumber', 'interiorNumber', 'neighborhood',
+          'city', 'state', 'postalCode', 'country'
+        ])
+        && validString(address.street, 1, 160)
+        && validOptionalString(address, 'exteriorNumber', 20)
+        && validOptionalString(address, 'interiorNumber', 20)
+        && validOptionalString(address, 'neighborhood', 120)
+        && validString(address.city, 1, 100)
+        && validString(address.state, 1, 100)
+        && validString(address.postalCode, 4, 10)
+        && validString(address.country, 1, 80);
+    }
+
+    function validRequestTransition(previous, next) {
+      return previous == next
+        || (previous == 'pending' && next in ['assigned', 'cancelled'])
+        || (previous == 'assigned' && next in ['in_progress', 'cancelled'])
+        || (previous == 'in_progress' && next in ['completed', 'cancelled']);
+    }
+
+    function validQuoteStatus(value) {
+      return value in [
+        'draft', 'issued', 'sent', 'accepted', 'rejected', 'cancelled', 'expired'
+      ];
+    }
+
+    function validDocumentStatus(value) {
+      return value in ['not_generated', 'generating', 'ready', 'failed'];
+    }
+
+    // -------------------------------------------------------------------------
+    // Private user profiles: no blanket authenticated reads and no client writes
+    // -------------------------------------------------------------------------
+    match /users/{uid} {
+      // A signed-in user may read only their own profile so the UI can explain
+      // inactive, pending, suspended, missing-profile, and invalid-role states.
+      allow get: if (isSignedIn() && isOwner(uid)) || isAdmin();
+      allow list: if isAdmin() && boundedList(100);
+      allow create, update, delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Master data
+    // -------------------------------------------------------------------------
+    function validClient(data) {
+      return data.keys().hasAll([
+          'name', 'status', 'operatorIds',
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
+        ])
+        && data.keys().hasOnly([
+          'name', 'legalName', 'rfc', 'contactName', 'email', 'phone',
+          'billingAddress', 'status', 'notes', 'operatorIds',
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
+        ])
+        && validString(data.name, 1, 120)
+        && validOptionalString(data, 'legalName', 160)
+        && validOptionalString(data, 'rfc', 13)
+        && validOptionalString(data, 'contactName', 160)
+        && validOptionalString(data, 'email', 254)
+        && validOptionalString(data, 'phone', 30)
+        && (!(data.keys().hasAny(['billingAddress']))
+          || validAddress(data.billingAddress))
+        && validOptionalString(data, 'notes', 2000)
+        && data.status in ['active', 'inactive']
+        && validOperatorAcl(data);
+    }
+
+    match /clients/{clientId} {
+      allow get: if canReadMasterData(resource.data);
+      allow list: if canReadMasterData(resource.data) && boundedList(100);
+      allow create: if isAdmin()
+        && validClient(request.resource.data)
+        && request.resource.data.operatorIds == []
+        && validCreateAudit(request.resource.data);
+      allow update: if isAdmin()
+        && validClient(request.resource.data)
+        && validUpdateAudit(request.resource.data)
+        && request.resource.data.operatorIds == resource.data.operatorIds;
+      allow delete: if false;
+    }
+
+    function validSite(data) {
+      return data.keys().hasAll([
+          'clientId', 'name', 'type', 'address', 'status', 'operatorIds',
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
+        ])
+        && data.keys().hasOnly([
+          'clientId', 'name', 'type', 'address', 'contactName', 'contactPhone',
+          'status', 'operatorIds',
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
+        ])
+        && validString(data.clientId, 1, 128)
+        && validString(data.name, 1, 120)
+        && data.type in ['plant', 'ranch', 'branch', 'warehouse', 'other']
+        && validAddress(data.address)
+        && validOptionalString(data, 'contactName', 160)
+        && validOptionalString(data, 'contactPhone', 30)
+        && data.status in ['active', 'inactive']
+        && validOperatorAcl(data);
+    }
+
+    match /sites/{siteId} {
+      allow get: if canReadMasterData(resource.data);
+      allow list: if canReadMasterData(resource.data) && boundedList(100);
+      allow create: if isAdmin()
+        && validSite(request.resource.data)
+        && request.resource.data.operatorIds == []
+        && validCreateAudit(request.resource.data);
+      allow update: if isAdmin()
+        && validSite(request.resource.data)
+        && validUpdateAudit(request.resource.data)
+        && request.resource.data.clientId == resource.data.clientId
+        && request.resource.data.operatorIds == resource.data.operatorIds;
+      allow delete: if false;
+    }
+
+    function validEquipment(data) {
+      return data.keys().hasAll([
+          'clientId', 'siteId', 'name', 'category', 'status', 'operatorIds',
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
+        ])
+        && data.keys().hasOnly([
+          'clientId', 'siteId', 'name', 'category', 'brand', 'model',
+          'serialNumber', 'capacity', 'refrigerant', 'technicalNotes',
+          'status', 'operatorIds',
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
+        ])
+        && validString(data.clientId, 1, 128)
+        && validString(data.siteId, 1, 128)
+        && validString(data.name, 1, 120)
+        && validString(data.category, 1, 120)
+        && validOptionalString(data, 'brand', 160)
+        && validOptionalString(data, 'model', 160)
+        && validOptionalString(data, 'serialNumber', 160)
+        && validOptionalString(data, 'capacity', 160)
+        && validOptionalString(data, 'refrigerant', 160)
+        && validOptionalString(data, 'technicalNotes', 2000)
+        && data.status in ['active', 'inactive', 'retired']
+        && validOperatorAcl(data);
+    }
+
+    match /equipment/{equipmentId} {
+      allow get: if canReadMasterData(resource.data);
+      allow list: if canReadMasterData(resource.data) && boundedList(100);
+      allow create: if isAdmin()
+        && validEquipment(request.resource.data)
+        && request.resource.data.operatorIds == []
+        && validCreateAudit(request.resource.data);
+      allow update: if isAdmin()
+        && validEquipment(request.resource.data)
+        && validUpdateAudit(request.resource.data)
+        && request.resource.data.clientId == resource.data.clientId
+        && request.resource.data.siteId == resource.data.siteId
+        && request.resource.data.operatorIds == resource.data.operatorIds;
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Requests and assignment workflow
+    // -------------------------------------------------------------------------
+    function validRequest(data) {
+      return data.keys().hasAll([
+          'clientId', 'siteId', 'title', 'description', 'priority', 'status',
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
+        ])
+        && data.keys().hasOnly([
+          'clientId', 'siteId', 'equipmentId', 'title', 'description',
+          'priority', 'status', 'assignedTo', 'assignedAt', 'completedAt',
+          'correctionOfRequestId', 'correctionOfQuoteId',
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
+        ])
+        && validString(data.clientId, 1, 128)
+        && validString(data.siteId, 1, 128)
+        && validNullableString(data, 'equipmentId', 128)
+        && validString(data.title, 1, 120)
+        && validString(data.description, 1, 4000)
+        && data.priority in ['low', 'normal', 'high', 'urgent']
+        && data.status in [
+          'pending', 'assigned', 'in_progress', 'completed', 'cancelled'
+        ]
+        && validNullableString(data, 'assignedTo', 128)
+        && validNullableTimestamp(data, 'assignedAt')
+        && validNullableTimestamp(data, 'completedAt')
+        && validNullableString(data, 'correctionOfRequestId', 128)
+        && validNullableString(data, 'correctionOfQuoteId', 128);
+    }
+
+    function validRequestAssignment(data) {
+      return (data.status == 'pending' && data.assignedTo == null)
+        || (
+          data.status in ['assigned', 'in_progress']
+          && data.assignedTo is string
+          && data.assignedTo.size() >= 1
+          && data.assignedTo.size() <= 128
+        )
+        || data.status in ['completed', 'cancelled'];
+    }
+
+    match /requests/{requestId} {
+      allow get: if isAdmin()
+        || (isOperator() && resource.data.assignedTo == request.auth.uid);
+      allow list: if (
+          isAdmin()
+          || (isOperator() && resource.data.assignedTo == request.auth.uid)
+        ) && boundedList(100);
+      allow create: if isAdmin()
+        && validRequest(request.resource.data)
+        && validRequestAssignment(request.resource.data)
+        && validCreateAudit(request.resource.data);
+      allow update: if (
+          isAdmin()
+          && validRequestTransition(resource.data.status, request.resource.data.status)
+          && request.resource.data.clientId == resource.data.clientId
+          && request.resource.data.siteId == resource.data.siteId
+          && request.resource.data.createdBy == resource.data.createdBy
+          && validRequest(request.resource.data)
+          && validRequestAssignment(request.resource.data)
+          && validUpdateAudit(request.resource.data)
+        ) || (
+          isOperator()
+          && resource.data.assignedTo == request.auth.uid
+          && request.resource.data.assignedTo == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'completedAt', 'updatedAt', 'updatedBy'
+          ])
+          && (
+            (resource.data.status == 'assigned'
+              && request.resource.data.status == 'in_progress')
+            || (resource.data.status == 'in_progress'
+              && request.resource.data.status == 'completed'
+              && request.resource.data.completedAt == request.time)
+          )
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.updatedBy == request.auth.uid
+        );
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Quotes and draft items
+    // -------------------------------------------------------------------------
+    function canReadQuote(data) {
+      return isAdmin()
+        || (isOperator() && data.assignedTo == request.auth.uid);
+    }
+
+    function validMoney(value) {
+      return value is number && value >= 0 && value <= 1000000000000;
+    }
+
+    function validQuote(data) {
+      return data.keys().hasAll([
+          'folio', 'requestId', 'assignedTo', 'clientId', 'siteId',
+          'status', 'documentStatus', 'currency', 'taxRate',
+          'discountDisplayMode', 'subtotalOriginal', 'discountTotal',
+          'subtotalFinal', 'taxTotal', 'grandTotal', 'validityDays',
+          'revisionNumber', 'locked',
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
+        ])
+        && data.keys().hasOnly([
+          'folio', 'requestId', 'assignedTo', 'clientId', 'siteId',
+          'equipmentId', 'status', 'documentStatus', 'currency', 'taxRate',
+          'discountDisplayMode', 'subtotalOriginal', 'discountTotal',
+          'subtotalFinal', 'taxTotal', 'grandTotal', 'notes', 'validityDays',
+          'validUntil', 'issuedAt', 'issuedBy', 'originalQuoteId',
+          'revisionNumber', 'locked', 'issuanceKey',
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
+        ])
+        && validString(data.folio, 0, 32)
+        && validString(data.requestId, 1, 128)
+        && validNullableString(data, 'assignedTo', 128)
+        && validString(data.clientId, 1, 128)
+        && validString(data.siteId, 1, 128)
+        && validNullableString(data, 'equipmentId', 128)
+        && validQuoteStatus(data.status)
+        && validDocumentStatus(data.documentStatus)
+        && data.currency == 'MXN'
+        && data.taxRate is number && data.taxRate >= 0 && data.taxRate <= 1
+        && data.discountDisplayMode in ['detailed', 'summary', 'incorporated']
+        && validMoney(data.subtotalOriginal)
+        && validMoney(data.discountTotal)
+        && validMoney(data.subtotalFinal)
+        && validMoney(data.taxTotal)
+        && validMoney(data.grandTotal)
+        && validOptionalString(data, 'notes', 4000)
+        && data.validityDays is int
+        && data.validityDays >= 1 && data.validityDays <= 365
+        && validNullableTimestamp(data, 'validUntil')
+        && validNullableTimestamp(data, 'issuedAt')
+        && validNullableString(data, 'issuedBy', 128)
+        && validNullableString(data, 'originalQuoteId', 128)
+        && data.revisionNumber is int
+        && data.revisionNumber >= 1 && data.revisionNumber <= 1000
+        && data.locked is bool
+        && validOptionalString(data, 'issuanceKey', 64);
+    }
+
+    function validMutableQuote(data) {
+      return validQuoteStatus(data.status)
+        && validDocumentStatus(data.documentStatus)
+        && data.currency == 'MXN'
+        && data.taxRate is number && data.taxRate >= 0 && data.taxRate <= 1
+        && data.discountDisplayMode in ['detailed', 'summary', 'incorporated']
+        && validMoney(data.subtotalOriginal)
+        && validMoney(data.discountTotal)
+        && validMoney(data.subtotalFinal)
+        && validMoney(data.taxTotal)
+        && validMoney(data.grandTotal)
+        && validOptionalString(data, 'notes', 4000)
+        && data.validityDays is int
+        && data.validityDays >= 1 && data.validityDays <= 365;
+    }
+
+    function requestAssignedToActor(requestId) {
+      return get(
+        /databases/$(database)/documents/requests/$(requestId)
+      ).data.assignedTo == request.auth.uid;
+    }
+
+    function quoteMatchesRequest(data) {
+      let linkedRequest = get(
+        /databases/$(database)/documents/requests/$(data.requestId)
+      ).data;
+      return data.assignedTo == linkedRequest.assignedTo
+        && data.clientId == linkedRequest.clientId
+        && data.siteId == linkedRequest.siteId
+        && data.equipmentId == linkedRequest.equipmentId;
+    }
+
+    function validInitialQuoteState(data) {
+      return data.folio == ''
+        && data.status == 'draft'
+        && data.documentStatus == 'not_generated'
+        && data.locked == false
+        && data.validUntil == null
+        && data.issuedAt == null
+        && data.issuedBy == null
+        && data.originalQuoteId == null
+        && data.revisionNumber == 1
+        && !('issuanceKey' in data);
+    }
+
+    match /quotes/{quoteId} {
+      allow get: if isActiveUser() && canReadQuote(resource.data);
+      allow list: if isActiveUser()
+        && canReadQuote(resource.data)
+        && boundedList(100);
+      allow create: if isActiveUser()
+        && validInitialQuoteState(request.resource.data)
+        && quoteMatchesRequest(request.resource.data)
+        && (
+          isAdmin()
+          || (
+            isOperator()
+            && request.resource.data.assignedTo == request.auth.uid
+            && requestAssignedToActor(request.resource.data.requestId)
+          )
+        )
+        && validQuote(request.resource.data)
+        && validCreateAudit(request.resource.data);
+      allow update: if isActiveUser()
+        && canReadQuote(resource.data)
+        && resource.data.status == 'draft'
+        && resource.data.locked == false
+        && request.resource.data.status == 'draft'
+        && request.resource.data.locked == false
+        && request.resource.data.documentStatus in ['not_generated', 'failed']
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'folio', 'requestId', 'assignedTo', 'clientId', 'siteId',
+          'equipmentId', 'createdAt', 'createdBy', 'schemaVersion',
+          'originalQuoteId', 'revisionNumber', 'issuanceKey',
+          'issuedAt', 'issuedBy', 'validUntil'
+        ])
+        && validMutableQuote(request.resource.data)
+        && validUpdateAudit(request.resource.data);
+      allow delete: if false;
+
+      function validQuoteItem(data) {
+        let originalLine = data.quantity * data.originalUnitPrice;
+        return data.keys().hasAll([
+            'position', 'quantity', 'unit', 'description',
+            'originalUnitPrice', 'discountType', 'discountValue',
+            'discountAmount', 'finalUnitPrice', 'lineSubtotal', 'taxable',
+            'createdAt', 'updatedAt'
+          ])
+          && data.keys().hasOnly([
+            'position', 'catalogItemId', 'quantity', 'unit',
+            'equipmentOrService', 'brand', 'model', 'description',
+            'originalUnitPrice', 'discountType', 'discountValue',
+            'discountAmount', 'finalUnitPrice', 'lineSubtotal', 'taxable',
+            'createdAt', 'updatedAt'
+          ])
+          && data.position is int && data.position >= 0 && data.position <= 999
+          && data.quantity is number
+          && data.quantity > 0 && data.quantity <= 1000000
+          && validString(data.unit, 1, 40)
+          && validNullableString(data, 'catalogItemId', 128)
+          && validOptionalString(data, 'equipmentOrService', 160)
+          && validOptionalString(data, 'brand', 160)
+          && validOptionalString(data, 'model', 160)
+          && validString(data.description, 1, 2000)
+          && validMoney(data.originalUnitPrice)
+          && data.discountType in ['none', 'percentage', 'fixed']
+          && validMoney(data.discountValue)
+          && validMoney(data.discountAmount)
+          && validMoney(data.finalUnitPrice)
+          && validMoney(data.lineSubtotal)
+          && (
+            (data.discountType == 'none' && data.discountValue == 0)
+            || (data.discountType == 'percentage' && data.discountValue <= 100)
+            || (data.discountType == 'fixed' && data.discountValue <= originalLine)
+          )
+          && data.discountAmount <= originalLine
+          && data.finalUnitPrice <= data.originalUnitPrice
+          && data.lineSubtotal <= originalLine
+          && data.taxable is bool
+          && data.createdAt is timestamp
+          && data.updatedAt is timestamp;
+      }
+
+      function editableParentQuote() {
+        let quote = get(
+          /databases/$(database)/documents/quotes/$(quoteId)
+        ).data;
+        return quote.status == 'draft'
+          && quote.locked == false
+          && canReadQuote(quote);
+      }
+
+      match /items/{itemId} {
+        allow get: if isActiveUser() && canReadQuote(
+          get(/databases/$(database)/documents/quotes/$(quoteId)).data
+        );
+        allow list: if isActiveUser()
+          && canReadQuote(
+            get(/databases/$(database)/documents/quotes/$(quoteId)).data
+          )
+          && boundedList(100);
+        allow create: if editableParentQuote()
+          && validQuoteItem(request.resource.data)
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedAt == request.time;
+        allow update: if editableParentQuote()
+          && validQuoteItem(request.resource.data)
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if editableParentQuote();
+      }
+
+      match /issuanceAttempts/{attemptId} {
+        allow read, write: if false;
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Catalogs and settings
+    // -------------------------------------------------------------------------
+    function validCatalog(data) {
+      return data.keys().hasAll([
+          'type', 'name', 'value', 'status',
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
+        ])
+        && data.keys().hasOnly([
+          'type', 'name', 'value', 'status',
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
+        ])
+        && data.type in [
+          'unit', 'concept', 'equipment_category', 'site_type',
+          'payment_method', 'priority', 'commercial_text'
+        ]
+        && validString(data.name, 1, 120)
+        && validString(data.value, 1, 500)
+        && data.status in ['active', 'inactive'];
+    }
+
+    match /catalogs/{catalogId} {
+      allow get: if isActiveUser();
+      allow list: if isActiveUser() && boundedList(100);
+      allow create: if isAdmin()
+        && validCatalog(request.resource.data)
+        && validCreateAudit(request.resource.data);
+      allow update: if isAdmin()
+        && validCatalog(request.resource.data)
+        && validUpdateAudit(request.resource.data);
+      allow delete: if false;
+    }
+
+    function validCompanyProfile(data) {
+      return data.keys().hasAll([
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
+        ])
+        && data.keys().hasOnly([
+          'companyName', 'rfc', 'address', 'phone', 'email', 'legalText',
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
+        ])
+        && validOptionalString(data, 'companyName', 120)
+        && validOptionalString(data, 'rfc', 13)
+        && validOptionalString(data, 'address', 300)
+        && validOptionalString(data, 'phone', 30)
+        && validOptionalString(data, 'email', 254)
+        && validOptionalString(data, 'legalText', 3000);
+    }
+
+    function validQuoteDefaults(data) {
+      return data.keys().hasAll([
+          'taxRate', 'validityDays', 'currency', 'folioPrefix',
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
+        ])
+        && data.keys().hasOnly([
+          'taxRate', 'validityDays', 'currency', 'folioPrefix',
+          'paymentMethod', 'advance', 'estimatedTerm', 'warranty',
+          'exclusions', 'observations', 'devWatermark',
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
+        ])
+        && data.taxRate is number && data.taxRate >= 0 && data.taxRate <= 1
+        && data.validityDays is int
+        && data.validityDays >= 1 && data.validityDays <= 365
+        && data.currency == 'MXN'
+        && validString(data.folioPrefix, 1, 12)
+        && validOptionalString(data, 'paymentMethod', 160)
+        && validOptionalString(data, 'advance', 160)
+        && validOptionalString(data, 'estimatedTerm', 160)
+        && validOptionalString(data, 'warranty', 1000)
+        && validOptionalString(data, 'exclusions', 2000)
+        && validOptionalString(data, 'observations', 2000)
+        && validOptionalString(data, 'devWatermark', 120);
+    }
+
+    match /settings/{settingId} {
+      allow get: if isActiveUser()
+        && settingId in ['companyProfile', 'quoteDefaults'];
+      allow list: if isAdmin() && boundedList(20);
+      allow create: if isAdmin()
+        && (
+          (settingId == 'companyProfile'
+            && validCompanyProfile(request.resource.data))
+          || (settingId == 'quoteDefaults'
+            && validQuoteDefaults(request.resource.data))
+        )
+        && validCreateAudit(request.resource.data);
+      allow update: if isAdmin()
+        && (
+          (settingId == 'companyProfile'
+            && validCompanyProfile(request.resource.data))
+          || (settingId == 'quoteDefaults'
+            && validQuoteDefaults(request.resource.data))
+        )
+        && validUpdateAudit(request.resource.data);
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Notifications, audit, private document metadata, backend counters
+    // -------------------------------------------------------------------------
+    match /notifications/{notificationId} {
+      allow get: if isActiveUser()
+        && resource.data.userId == request.auth.uid;
+      allow list: if isActiveUser()
+        && resource.data.userId == request.auth.uid
+        && boundedList(100);
+      allow create, delete: if false;
+      allow update: if isActiveUser()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'read', 'readAt'
+        ])
+        && request.resource.data.read == true
+        && request.resource.data.readAt == request.time;
+    }
+
+    match /auditLogs/{auditId} {
+      allow get: if isAdmin()
+        || (isOperator() && resource.data.actorId == request.auth.uid);
+      allow list: if (
+          isAdmin()
+          || (isOperator() && resource.data.actorId == request.auth.uid)
+        ) && boundedList(100);
+      allow create, update, delete: if false;
+    }
+
+    match /documents/{quoteId} {
+      allow get: if isActiveUser()
+        && canReadQuote(
+          get(/databases/$(database)/documents/quotes/$(quoteId)).data
+        );
+      allow list: if isAdmin() && boundedList(100);
+      allow create, update, delete: if false;
+    }
+
+    match /counters/{counterId} {
+      allow read, write: if false;
+    }
+
+    // Default deny covers all unexpected top-level and nested paths.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
