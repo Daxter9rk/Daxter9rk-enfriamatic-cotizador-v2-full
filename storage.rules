@@ -1,0 +1,17 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Quote PDFs are written and read only by Admin SDK Functions. The frontend
+    // uses the authenticated downloadQuotePdf callable and never receives a
+    // storage path, download token, or permanent URL.
+    match /quotes/{quoteId}/documents/{documentId} {
+      allow read, write: if false;
+    }
+
+    // Default deny for every other object and path.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

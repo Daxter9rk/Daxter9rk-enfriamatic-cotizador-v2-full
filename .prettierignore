@@ -1,0 +1,10 @@
+dist
+coverage
+functions/lib
+node_modules
+.emulator-data
+playwright-report
+test-results
+.agents
+.claude
+PROMPT_MAESTRO_CODEX_ENFRIAMATIC_V2_FULL.md
