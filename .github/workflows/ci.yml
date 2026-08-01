@@ -10,6 +10,15 @@ on:
 permissions:
   contents: read
 
+env:
+  VITE_FIREBASE_API_KEY: demo-api-key
+  VITE_FIREBASE_AUTH_DOMAIN: demo-enfriamatic.firebaseapp.com
+  VITE_FIREBASE_PROJECT_ID: demo-enfriamatic
+  VITE_FIREBASE_STORAGE_BUCKET: demo-enfriamatic.appspot.com
+  VITE_FIREBASE_MESSAGING_SENDER_ID: '000000000000'
+  VITE_FIREBASE_APP_ID: '1:000000000000:web:e2e'
+  VITE_USE_EMULATORS: 'true'
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -48,11 +57,3 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Validate emulator suite
         run: npm run validate:emulators
-        env:
-          VITE_FIREBASE_API_KEY: demo-api-key
-          VITE_FIREBASE_AUTH_DOMAIN: demo-enfriamatic.firebaseapp.com
-          VITE_FIREBASE_PROJECT_ID: demo-enfriamatic
-          VITE_FIREBASE_STORAGE_BUCKET: demo-enfriamatic.appspot.com
-          VITE_FIREBASE_MESSAGING_SENDER_ID: '000000000000'
-          VITE_FIREBASE_APP_ID: '1:000000000000:web:e2e'
-          VITE_USE_EMULATORS: 'true'
