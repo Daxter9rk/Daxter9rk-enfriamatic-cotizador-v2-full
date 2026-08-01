@@ -1,5 +1,5 @@
 import {useMemo, useState, type FormEvent} from 'react';
-import {useSearchParams} from 'react-router-dom';
+import {useLocation, useSearch} from 'wouter';
 import {useAuth} from '../../app/providers/AuthProvider';
 import {Modal} from '../../components/Modal';
 import {PageHeader} from '../../components/PageHeader';
@@ -12,7 +12,13 @@ import {canTransitionRequest} from '../../utils/transitions';
 
 export function RequestsPage() {
   const {profile} = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  const searchParams = useMemo(() => new URLSearchParams(search), [search]);
+  const setSearchParams = (params: Record<string, string>) => {
+    const query = new URLSearchParams(params).toString();
+    navigate(`/requests${query ? `?${query}` : ''}`, {replace: true});
+  };
   const requestConstraints =
     profile?.role === 'operator' ? [constraints.assignedTo(profile.uid)] : [];
   const requests = useCollection<ServiceRequest>('requests', requestConstraints);

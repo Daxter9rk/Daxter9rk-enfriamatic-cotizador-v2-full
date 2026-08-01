@@ -1,4 +1,4 @@
-import {Link} from 'react-router-dom';
+import {Link} from 'wouter';
 import {useAuth} from '../../app/providers/AuthProvider';
 import {PageHeader} from '../../components/PageHeader';
 import {StatePanel} from '../../components/StatePanel';
@@ -83,14 +83,14 @@ export function DashboardPage() {
               <p className="eyebrow">Trabajo activo</p>
               <h2>Solicitudes recientes</h2>
             </div>
-            <Link to="/requests">Ver todas</Link>
+            <Link href="/requests">Ver todas</Link>
           </div>
           {requests.data.length === 0 ? (
             <p className="empty-copy">No hay solicitudes en este momento.</p>
           ) : (
             <div className="stack-list">
               {requests.data.slice(0, 6).map((request) => (
-                <Link to={`/requests/${request.id}`} className="stack-row" key={request.id}>
+                <Link href={`/requests/${request.id}`} className="stack-row" key={request.id}>
                   <div>
                     <strong>{request.title}</strong>
                     <span>
@@ -131,14 +131,14 @@ export function DashboardPage() {
         <h2>Accesos rápidos</h2>
         <div>
           {profile?.role === 'admin' && (
-            <Link className="button button--primary" to="/requests?new=1">
+            <Link className="button button--primary" href="/requests?new=1">
               Nueva solicitud
             </Link>
           )}
-          <Link className="button button--secondary" to="/quotes">
+          <Link className="button button--secondary" href="/quotes">
             Abrir cotizaciones
           </Link>
-          <Link className="button button--ghost" to="/manual">
+          <Link className="button button--ghost" href="/manual">
             Consultar manual
           </Link>
         </div>

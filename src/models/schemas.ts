@@ -70,6 +70,45 @@ export const quoteItemInputSchema = z.object({
   discountType: z.enum(['none', 'percentage', 'fixed']),
   discountValue: z.number().min(0).max(1_000_000_000),
   taxable: z.boolean(),
+  catalogItemId: z.string().trim().max(128).nullable().optional(),
+  catalogCode: z.string().trim().max(40).nullable().optional(),
+  catalogType: z.enum(['product', 'service']).nullable().optional(),
+  catalogSnapshot: z
+    .object({
+      code: z.string().trim().min(1).max(40),
+      type: z.enum(['product', 'service']),
+      name: z.string().trim().min(1).max(160),
+      description: z.string().trim().min(1).max(2000),
+      category: z.string().trim().min(1).max(120),
+      unit: z.string().trim().min(1).max(40),
+      brand: z.string().trim().max(160).nullable(),
+      model: z.string().trim().max(160).nullable(),
+      basePrice: z.number().min(0).max(1_000_000_000),
+      taxable: z.boolean(),
+    })
+    .nullable()
+    .optional(),
+});
+
+export const catalogItemInputSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .min(2)
+    .max(40)
+    .regex(/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/),
+  type: z.enum(['product', 'service']),
+  name: z.string().trim().min(1).max(160),
+  description: z.string().trim().min(1).max(2000),
+  category: z.string().trim().min(1).max(120),
+  unit: z.string().trim().min(1).max(40),
+  brand: z.string().trim().max(160).nullable().optional(),
+  model: z.string().trim().max(160).nullable().optional(),
+  basePrice: z.number().min(0).max(1_000_000_000),
+  taxable: z.boolean(),
+  status: z.enum(['active', 'inactive']),
+  searchTokens: z.array(z.string().trim().min(1).max(80)).max(50),
 });
 
 export const createUserInputSchema = z.object({
@@ -85,4 +124,5 @@ export type SiteInput = z.infer<typeof siteInputSchema>;
 export type EquipmentInput = z.infer<typeof equipmentInputSchema>;
 export type RequestInput = z.infer<typeof requestInputSchema>;
 export type QuoteItemInput = z.infer<typeof quoteItemInputSchema>;
+export type CatalogItemInput = z.infer<typeof catalogItemInputSchema>;
 export type CreateUserInput = z.infer<typeof createUserInputSchema>;

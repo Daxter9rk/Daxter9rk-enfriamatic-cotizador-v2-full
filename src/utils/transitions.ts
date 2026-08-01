@@ -10,8 +10,8 @@ const requestTransitions: Record<RequestStatus, RequestStatus[]> = {
 
 const quoteTransitions: Record<QuoteStatus, QuoteStatus[]> = {
   draft: ['issued'],
-  issued: ['sent', 'cancelled', 'expired'],
-  sent: ['accepted', 'rejected', 'cancelled', 'expired'],
+  issued: ['sent', 'cancelled'],
+  sent: ['accepted', 'rejected', 'cancelled'],
   accepted: [],
   rejected: [],
   cancelled: [],

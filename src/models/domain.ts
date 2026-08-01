@@ -13,6 +13,8 @@ export type QuoteStatus =
   | 'expired';
 export type DocumentStatus = 'not_generated' | 'generating' | 'ready' | 'failed';
 export type DiscountDisplayMode = 'detailed' | 'summary' | 'incorporated';
+export type CatalogItemType = 'product' | 'service';
+export type CatalogItemStatus = 'active' | 'inactive';
 
 export interface AuditFields {
   createdAt: Timestamp;
@@ -128,12 +130,53 @@ export interface Quote extends AuditFields {
   originalQuoteId?: string | null;
   revisionNumber: number;
   locked: boolean;
+  commercialTransition?: QuoteCommercialTransition | null;
+}
+
+export interface CatalogItem extends AuditFields {
+  id: string;
+  code: string;
+  type: CatalogItemType;
+  name: string;
+  description: string;
+  category: string;
+  unit: string;
+  brand?: string | null;
+  model?: string | null;
+  basePrice: number;
+  taxable: boolean;
+  status: CatalogItemStatus;
+  searchTokens: string[];
+}
+
+export interface CatalogItemSnapshot {
+  code: string;
+  type: CatalogItemType;
+  name: string;
+  description: string;
+  category: string;
+  unit: string;
+  brand: string | null;
+  model: string | null;
+  basePrice: number;
+  taxable: boolean;
+}
+
+export interface QuoteCommercialTransition {
+  from: QuoteStatus;
+  to: QuoteStatus;
+  actorId: string;
+  at: Timestamp;
+  reason?: string | null;
 }
 
 export interface QuoteItem {
   id: string;
   position: number;
   catalogItemId?: string | null;
+  catalogCode?: string | null;
+  catalogType?: CatalogItemType | null;
+  catalogSnapshot?: CatalogItemSnapshot | null;
   quantity: number;
   unit: string;
   equipmentOrService?: string;

@@ -24,5 +24,6 @@ export {createUser} from './users/createUser';
 export {updateUser} from './users/updateUser';
 export {issueQuote} from './quotes/issueQuote';
 export {createCorrection} from './quotes/createCorrection';
+export {transitionQuote} from './quotes/transitionQuote';
 export {downloadQuotePdf} from './documents/downloadQuotePdf';
 export {auditDomainWrite} from './audit/domainWrite';

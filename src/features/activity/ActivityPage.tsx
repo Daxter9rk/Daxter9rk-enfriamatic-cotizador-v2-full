@@ -9,7 +9,7 @@ import {formatDate} from '../../utils/format';
 export function ActivityPage() {
   const {profile} = useAuth();
   const auditConstraints = profile?.role === 'operator' ? [constraints.auditFor(profile.uid)] : [];
-  const audit = useCollection<AuditLog>('auditLogs', auditConstraints, 50);
+  const audit = useCollection<AuditLog>('auditLogs', auditConstraints, 100);
   const notifications = useCollection<Notification>(
     'notifications',
     profile ? [constraints.notificationsFor(profile.uid)] : [],

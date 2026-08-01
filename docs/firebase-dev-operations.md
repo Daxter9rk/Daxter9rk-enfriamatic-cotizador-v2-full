@@ -19,6 +19,13 @@ Proyecto autorizado: `enfriamatic-cotizador-de-420e5`.
 4. En otra terminal ejecute `npm run seed:emulators`.
 5. Abra `http://127.0.0.1:5000`.
 
+Para cargar también productos/servicios ficticios y generar las capturas reproducibles de los manuales:
+
+```powershell
+npm run seed:emulators:functional
+npm run evidence:emulators
+```
+
 La semilla exige las variables de host de Auth, Firestore y Storage Emulator.
 Nunca debe apuntar al proyecto cloud.
 
@@ -39,3 +46,9 @@ Functions emite logs estructurados con actor, recurso, duración, código seguro
 y tamaño del PDF, sin contraseña ni bytes. Configure alertas de presupuesto,
 errores `quote.issue_failed`, latencia p95 y tasa de reintentos antes de ampliar
 usuarios.
+
+## Semilla cloud y rollback selectivo
+
+La semilla DEV se identifica simultáneamente con `dataOrigin: "dev-seed"`, `seedVersion: "functional-dev-v1"` y `seedTag: "enfriamatic-functional-demo-v1"`. Selecciona perfiles admin/operator activos sin modificarlos y se detiene si una ruta determinista ya pertenece a otro origen.
+
+Ejecuta primero el dry-run y usa siempre `--project enfriamatic-cotizador-de-420e5`; consulta [deployment.md](deployment.md) para los comandos completos. El rollback sólo elimina rutas deterministas que conservan los marcadores requeridos, procesa primero subcolecciones y mantiene fuera de alcance usuarios y PDFs oficiales.

@@ -81,6 +81,7 @@ blob-report/
 # Emulator exports and local analysis
 .emulator-data/
 .firestore-rules-analysis.md
+.artifacts/
 
 # Local AI-agent tooling and construction prompts
 .agents/

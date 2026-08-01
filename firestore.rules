@@ -9,7 +9,9 @@ rules_version = '2';
 // requests/{id}: admin creates/assigns; assigned operator advances workflow.
 // quotes/{id}: authorized users edit only unlocked drafts. Backend issues/locks.
 // quotes/{id}/items/{id}: draft line items; bounded and schema validated.
-// catalogs/{id}, settings/{knownId}: admin managed; active users read.
+// catalogItems/{code}: commercial products/services; admin managed, active
+//   operators read active entries. Code is immutable and is the document ID.
+// catalogs/{id}, settings/{knownId}: generic admin-managed configuration.
 // notifications/{id}: backend creates; owner may only mark read.
 // auditLogs/{id}, documents/{quoteId}, counters/{id}: backend writes only.
 // All operational documents use timestamps and schemaVersion 1.
@@ -98,6 +100,15 @@ service cloud.firestore {
         && data.schemaVersion == 1;
     }
 
+    function validSeedMetadata(data) {
+      return !data.keys().hasAny(['dataOrigin', 'seedVersion', 'seedTag'])
+        || (
+          data.dataOrigin == 'dev-seed'
+          && data.seedVersion == 'functional-dev-v1'
+          && data.seedTag == 'enfriamatic-functional-demo-v1'
+        );
+    }
+
     function validOperatorAcl(data) {
       return data.operatorIds is list && data.operatorIds.size() <= 100;
     }
@@ -173,6 +184,7 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'name', 'legalName', 'rfc', 'contactName', 'email', 'phone',
           'billingAddress', 'status', 'notes', 'operatorIds',
+          'dataOrigin', 'seedVersion', 'seedTag',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
         && validString(data.name, 1, 120)
@@ -185,7 +197,8 @@ service cloud.firestore {
           || validAddress(data.billingAddress))
         && validOptionalString(data, 'notes', 2000)
         && data.status in ['active', 'inactive']
-        && validOperatorAcl(data);
+        && validOperatorAcl(data)
+        && validSeedMetadata(data);
     }
 
     match /clients/{clientId} {
@@ -210,6 +223,7 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'clientId', 'name', 'type', 'address', 'contactName', 'contactPhone',
           'status', 'operatorIds',
+          'dataOrigin', 'seedVersion', 'seedTag',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
         && validString(data.clientId, 1, 128)
@@ -219,7 +233,8 @@ service cloud.firestore {
         && validOptionalString(data, 'contactName', 160)
         && validOptionalString(data, 'contactPhone', 30)
         && data.status in ['active', 'inactive']
-        && validOperatorAcl(data);
+        && validOperatorAcl(data)
+        && validSeedMetadata(data);
     }
 
     match /sites/{siteId} {
@@ -246,6 +261,7 @@ service cloud.firestore {
           'clientId', 'siteId', 'name', 'category', 'brand', 'model',
           'serialNumber', 'capacity', 'refrigerant', 'technicalNotes',
           'status', 'operatorIds',
+          'dataOrigin', 'seedVersion', 'seedTag',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
         && validString(data.clientId, 1, 128)
@@ -259,7 +275,8 @@ service cloud.firestore {
         && validOptionalString(data, 'refrigerant', 160)
         && validOptionalString(data, 'technicalNotes', 2000)
         && data.status in ['active', 'inactive', 'retired']
-        && validOperatorAcl(data);
+        && validOperatorAcl(data)
+        && validSeedMetadata(data);
     }
 
     match /equipment/{equipmentId} {
@@ -290,6 +307,7 @@ service cloud.firestore {
           'clientId', 'siteId', 'equipmentId', 'title', 'description',
           'priority', 'status', 'assignedTo', 'assignedAt', 'completedAt',
           'correctionOfRequestId', 'correctionOfQuoteId',
+          'dataOrigin', 'seedVersion', 'seedTag',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
         && validString(data.clientId, 1, 128)
@@ -305,7 +323,8 @@ service cloud.firestore {
         && validNullableTimestamp(data, 'assignedAt')
         && validNullableTimestamp(data, 'completedAt')
         && validNullableString(data, 'correctionOfRequestId', 128)
-        && validNullableString(data, 'correctionOfQuoteId', 128);
+        && validNullableString(data, 'correctionOfQuoteId', 128)
+        && validSeedMetadata(data);
     }
 
     function validRequestAssignment(data) {
@@ -387,6 +406,7 @@ service cloud.firestore {
           'subtotalFinal', 'taxTotal', 'grandTotal', 'notes', 'validityDays',
           'validUntil', 'issuedAt', 'issuedBy', 'originalQuoteId',
           'revisionNumber', 'locked', 'issuanceKey',
+          'commercialTransition', 'dataOrigin', 'seedVersion', 'seedTag',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
         && validString(data.folio, 0, 32)
@@ -415,7 +435,8 @@ service cloud.firestore {
         && data.revisionNumber is int
         && data.revisionNumber >= 1 && data.revisionNumber <= 1000
         && data.locked is bool
-        && validOptionalString(data, 'issuanceKey', 64);
+        && validOptionalString(data, 'issuanceKey', 64)
+        && validSeedMetadata(data);
     }
 
     function validMutableQuote(data) {
@@ -460,7 +481,8 @@ service cloud.firestore {
         && data.issuedBy == null
         && data.originalQuoteId == null
         && data.revisionNumber == 1
-        && !('issuanceKey' in data);
+        && !('issuanceKey' in data)
+        && !('commercialTransition' in data);
     }
 
     match /quotes/{quoteId} {
@@ -492,7 +514,7 @@ service cloud.firestore {
           'folio', 'requestId', 'assignedTo', 'clientId', 'siteId',
           'equipmentId', 'createdAt', 'createdBy', 'schemaVersion',
           'originalQuoteId', 'revisionNumber', 'issuanceKey',
-          'issuedAt', 'issuedBy', 'validUntil'
+          'issuedAt', 'issuedBy', 'validUntil', 'commercialTransition'
         ])
         && validMutableQuote(request.resource.data)
         && validUpdateAudit(request.resource.data);
@@ -507,10 +529,12 @@ service cloud.firestore {
             'createdAt', 'updatedAt'
           ])
           && data.keys().hasOnly([
-            'position', 'catalogItemId', 'quantity', 'unit',
+            'position', 'catalogItemId', 'catalogCode', 'catalogType',
+            'catalogSnapshot', 'quantity', 'unit',
             'equipmentOrService', 'brand', 'model', 'description',
             'originalUnitPrice', 'discountType', 'discountValue',
             'discountAmount', 'finalUnitPrice', 'lineSubtotal', 'taxable',
+            'dataOrigin', 'seedVersion', 'seedTag',
             'createdAt', 'updatedAt'
           ])
           && data.position is int && data.position >= 0 && data.position <= 999
@@ -518,6 +542,9 @@ service cloud.firestore {
           && data.quantity > 0 && data.quantity <= 1000000
           && validString(data.unit, 1, 40)
           && validNullableString(data, 'catalogItemId', 128)
+          && validNullableString(data, 'catalogCode', 40)
+          && (!(data.keys().hasAny(['catalogType'])) || data.catalogType == null
+            || data.catalogType in ['product', 'service'])
           && validOptionalString(data, 'equipmentOrService', 160)
           && validOptionalString(data, 'brand', 160)
           && validOptionalString(data, 'model', 160)
@@ -534,11 +561,56 @@ service cloud.firestore {
             || (data.discountType == 'fixed' && data.discountValue <= originalLine)
           )
           && data.discountAmount <= originalLine
-          && data.finalUnitPrice <= data.originalUnitPrice
-          && data.lineSubtotal <= originalLine
           && data.taxable is bool
           && data.createdAt is timestamp
           && data.updatedAt is timestamp;
+      }
+
+      function validCatalogSnapshot(snapshot) {
+        return snapshot is map
+          && snapshot.keys().hasAll([
+            'code', 'type', 'name', 'description', 'category', 'unit',
+            'brand', 'model', 'basePrice', 'taxable'
+          ])
+          && snapshot.keys().hasOnly([
+            'code', 'type', 'name', 'description', 'category', 'unit',
+            'brand', 'model', 'basePrice', 'taxable'
+          ])
+          && validString(snapshot.code, 2, 40)
+          && snapshot.type in ['product', 'service']
+          && validString(snapshot.name, 1, 160)
+          && validString(snapshot.description, 1, 2000)
+          && validString(snapshot.category, 1, 120)
+          && validString(snapshot.unit, 1, 40)
+          && validNullableString(snapshot, 'brand', 160)
+          && validNullableString(snapshot, 'model', 160)
+          && validMoney(snapshot.basePrice)
+          && snapshot.taxable is bool;
+      }
+
+      function isManualCatalogSelection(data) {
+        return !data.keys().hasAny([
+          'catalogItemId', 'catalogCode', 'catalogType', 'catalogSnapshot'
+        ]);
+      }
+
+      function validCatalogSelectionOnCreate(data) {
+        let selected = get(
+          /databases/$(database)/documents/catalogItems/$(data.catalogItemId)
+        ).data;
+        return validString(data.catalogItemId, 2, 40)
+          && data.catalogItemId == data.catalogCode
+          && validCatalogSnapshot(data.catalogSnapshot)
+          && data.catalogSnapshot.code == data.catalogCode
+          && data.catalogSnapshot.type == data.catalogType
+          && exists(
+            /databases/$(database)/documents/catalogItems/$(data.catalogItemId)
+          )
+          && selected.status == 'active'
+          && selected.code == data.catalogCode
+          && selected.type == data.catalogType
+          && selected.basePrice == data.catalogSnapshot.basePrice
+          && selected.taxable == data.catalogSnapshot.taxable;
       }
 
       function editableParentQuote() {
@@ -561,10 +633,17 @@ service cloud.firestore {
           && boundedList(100);
         allow create: if editableParentQuote()
           && validQuoteItem(request.resource.data)
+          && (
+            isManualCatalogSelection(request.resource.data)
+            || validCatalogSelectionOnCreate(request.resource.data)
+          )
           && request.resource.data.createdAt == request.time
           && request.resource.data.updatedAt == request.time;
         allow update: if editableParentQuote()
           && validQuoteItem(request.resource.data)
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'catalogItemId', 'catalogCode', 'catalogType', 'catalogSnapshot'
+          ])
           && request.resource.data.createdAt == resource.data.createdAt
           && request.resource.data.updatedAt == request.time;
         allow delete: if editableParentQuote();
@@ -576,11 +655,61 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
-    // Catalogs and settings
+    // Commercial catalog, generic catalogs, and settings
     // -------------------------------------------------------------------------
+    function validCatalogItem(data) {
+      return data.keys().hasAll([
+          'code', 'type', 'name', 'description', 'category', 'unit',
+          'basePrice', 'taxable', 'status', 'searchTokens',
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
+        ])
+        && data.keys().hasOnly([
+          'code', 'type', 'name', 'description', 'category', 'unit',
+          'brand', 'model', 'basePrice', 'taxable', 'status', 'searchTokens',
+          'dataOrigin', 'seedVersion', 'seedTag',
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
+        ])
+        && validString(data.code, 2, 40)
+        && data.code.matches('^[A-Z0-9]+(-[A-Z0-9]+)*$')
+        && data.type in ['product', 'service']
+        && validString(data.name, 1, 160)
+        && validString(data.description, 1, 2000)
+        && validString(data.category, 1, 120)
+        && validString(data.unit, 1, 40)
+        && validNullableString(data, 'brand', 160)
+        && validNullableString(data, 'model', 160)
+        && validMoney(data.basePrice)
+        && data.taxable is bool
+        && data.status in ['active', 'inactive']
+        && data.searchTokens is list
+        && data.searchTokens.size() <= 50
+        && validSeedMetadata(data);
+    }
+
+    match /catalogItems/{catalogItemId} {
+      allow get: if isAdmin()
+        || (isOperator() && resource.data.status == 'active');
+      allow list: if boundedList(100)
+        && (
+          isAdmin()
+          || (isOperator() && resource.data.status == 'active')
+        );
+      allow create: if isAdmin()
+        && catalogItemId == request.resource.data.code
+        && validCatalogItem(request.resource.data)
+        && validCreateAudit(request.resource.data);
+      allow update: if isAdmin()
+        && catalogItemId == resource.data.code
+        && request.resource.data.code == resource.data.code
+        && validCatalogItem(request.resource.data)
+        && validUpdateAudit(request.resource.data);
+      allow delete: if false;
+    }
+
     function validCatalog(data) {
       return data.keys().hasAll([
           'type', 'name', 'value', 'status',
+          'dataOrigin', 'seedVersion', 'seedTag',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
         && data.keys().hasOnly([
@@ -593,7 +722,8 @@ service cloud.firestore {
         ]
         && validString(data.name, 1, 120)
         && validString(data.value, 1, 500)
-        && data.status in ['active', 'inactive'];
+        && data.status in ['active', 'inactive']
+        && validSeedMetadata(data);
     }
 
     match /catalogs/{catalogId} {
@@ -614,6 +744,7 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'companyName', 'rfc', 'address', 'phone', 'email', 'legalText',
+          'dataOrigin', 'seedVersion', 'seedTag',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
         && validOptionalString(data, 'companyName', 120)
@@ -621,7 +752,8 @@ service cloud.firestore {
         && validOptionalString(data, 'address', 300)
         && validOptionalString(data, 'phone', 30)
         && validOptionalString(data, 'email', 254)
-        && validOptionalString(data, 'legalText', 3000);
+        && validOptionalString(data, 'legalText', 3000)
+        && validSeedMetadata(data);
     }
 
     function validQuoteDefaults(data) {
@@ -633,6 +765,7 @@ service cloud.firestore {
           'taxRate', 'validityDays', 'currency', 'folioPrefix',
           'paymentMethod', 'advance', 'estimatedTerm', 'warranty',
           'exclusions', 'observations', 'devWatermark',
+          'dataOrigin', 'seedVersion', 'seedTag',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
         && data.taxRate is number && data.taxRate >= 0 && data.taxRate <= 1
@@ -646,7 +779,8 @@ service cloud.firestore {
         && validOptionalString(data, 'warranty', 1000)
         && validOptionalString(data, 'exclusions', 2000)
         && validOptionalString(data, 'observations', 2000)
-        && validOptionalString(data, 'devWatermark', 120);
+        && validOptionalString(data, 'devWatermark', 120)
+        && validSeedMetadata(data);
     }
 
     match /settings/{settingId} {

@@ -16,9 +16,9 @@ export function LoginPage() {
     <main className="auth-page">
       <section className="login-card">
         <img src={logo} alt="Enfriamatic" className="login-card__logo" />
-        <p className="eyebrow">Control industrial</p>
-        <h1>Cotizaciones técnicas, bajo control</h1>
-        <p>Acceso exclusivo para personal autorizado de Enfriamatic.</p>
+        <p className="eyebrow">Enfriamatic Cotizador V2</p>
+        <h1>Acceso al sistema</h1>
+        <p>Ingresa tus credenciales para continuar.</p>
         <form onSubmit={(event) => void handleSubmit(event)}>
           <label>
             Correo electrónico
@@ -55,8 +55,14 @@ export function LoginPage() {
       </section>
       <aside className="auth-page__visual" aria-hidden="true">
         <div>
-          <span>ENFRIAMATIC</span>
-          <strong>Precisión que mantiene la industria en movimiento.</strong>
+          <span>REFRIGERACIÓN INDUSTRIAL</span>
+          <strong>La forma más rápida y precisa de cotizar soluciones industriales.</strong>
+          <ul>
+            <li>Cotizaciones profesionales en minutos</li>
+            <li>Datos y trazabilidad de principio a fin</li>
+            <li>Información privada y acceso por rol</li>
+          </ul>
+          <small>DEV · Los datos mostrados son ficticios y exclusivos para pruebas.</small>
         </div>
       </aside>
     </main>
