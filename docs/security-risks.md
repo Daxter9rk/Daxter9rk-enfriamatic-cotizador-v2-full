@@ -37,6 +37,13 @@
    consumir cuota. Antes de exposición amplia conviene App Check, alertas de
    presupuesto y, si se requiere límite estricto, mutación transaccional vía
    Function con contador.
+7. El árbol compatible de `firebase-admin` conserva siete avisos moderados por
+   `uuid < 11.1.1` dentro de `gaxios`/`teeny-request`; esas rutas generan UUID v4
+   internos y no reciben buffers ni parámetros del usuario, por lo que no
+   alcanzan la operación v3/v5/v6 descrita por GHSA-w5hq-g745-h8pq. `audit:all`
+   falla ante severidad alta o crítica. No se fuerzan majors incompatibles para
+   ocultar este aviso; debe retirarse cuando Google Cloud Storage actualice sus
+   dependencias.
 
 ## Ataques revisados
 

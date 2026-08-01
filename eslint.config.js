@@ -11,6 +11,8 @@ export default tseslint.config(
       'coverage',
       'functions',
       'playwright-report',
+      '.artifacts',
+      'tmp',
       '.emulator-data',
       '.agents',
       '.claude',

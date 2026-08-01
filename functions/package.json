@@ -36,12 +36,5 @@
     "typescript": "5.9.2",
     "vitest": "3.2.7"
   },
-  "overrides": {
-    "@google-cloud/storage": {
-      "gaxios": "7.3.0",
-      "retry-request": "9.0.0",
-      "teeny-request": "11.0.0"
-    }
-  },
   "private": true
 }
