@@ -37,6 +37,7 @@ export const issueQuote = onCall(
     const documentRef = firestore.doc(`documents/${quoteId}`);
     const attemptRef = quoteRef.collection('issuanceAttempts').doc(idempotencyKey);
     let reserved = false;
+    let stage = 'reserve';
 
     try {
       const reservation = await firestore.runTransaction<Reservation>(async (transaction) => {
@@ -168,6 +169,7 @@ export const issueQuote = onCall(
         };
       }
       reserved = true;
+      stage = 'load-related';
 
       const [
         quoteSnapshot,
@@ -219,6 +221,7 @@ export const issueQuote = onCall(
         ? await firestore.doc(`equipment/${String(quote.equipmentId)}`).get()
         : null;
       const logoPath = path.resolve(__dirname, '../../assets/enfriamatic-logo-transparent.png');
+      stage = 'generate-pdf';
       const generated = await generateQuotePdf({
         folio: reservation.folio,
         issuedAt: new Date(),
@@ -258,6 +261,7 @@ export const issueQuote = onCall(
         throw new Error('pdf-too-large');
       }
 
+      stage = 'save-storage';
       const storagePath = `quotes/${quoteId}/documents/${documentRef.id}.pdf`;
       const fileName = `${reservation.folio}.pdf`;
       const hash = createHash('sha256').update(generated.bytes).digest('hex');
@@ -273,6 +277,7 @@ export const issueQuote = onCall(
           },
         });
 
+      stage = 'finalize';
       await firestore.runTransaction(async (transaction) => {
         const latestQuote = await transaction.get(quoteRef);
         if (
@@ -384,6 +389,7 @@ export const issueQuote = onCall(
         actorId: actor.uid,
         quoteId,
         code,
+        stage,
         durationMs: Date.now() - startedAt,
       });
       if (reserved) {
