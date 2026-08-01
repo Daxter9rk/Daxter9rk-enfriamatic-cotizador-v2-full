@@ -7,6 +7,7 @@ import {mkdir, readFile, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import {DEV_PROJECT_ID} from './dev-seed-core';
+import {runProcess} from './portable-process';
 
 const projectIndex = process.argv.indexOf('--project');
 const projectId = projectIndex >= 0 ? (process.argv[projectIndex + 1] ?? '') : '';
@@ -60,7 +61,6 @@ for (const collection of collections) {
 const settings = await db.collection('settings').get();
 const catalogItems = await db.collection('catalogItems').get();
 const [pdfFiles] = await storage.bucket().getFiles({prefix: 'quotes/'});
-const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 const git = (args: string[]) => execFileSync('git', args, {encoding: 'utf8'}).trim();
 const baselineFile = (file: string) => git(['show', `HEAD:${file}`]);
 
@@ -109,10 +109,7 @@ console.log(`Inventario previo guardado localmente en ${outputDirectory}`);
 
 function safeFirebaseJson(args: string[]): unknown {
   try {
-    const output = execFileSync(npx, ['-y', 'firebase-tools@latest', ...args], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const output = runProcess('npx', ['-y', 'firebase-tools@latest', ...args]);
     return JSON.parse(output);
   } catch (error) {
     return {error: error instanceof Error ? error.message.slice(0, 500) : 'unknown'};
