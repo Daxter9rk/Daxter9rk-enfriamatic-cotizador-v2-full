@@ -32,6 +32,8 @@ describe('quote PDF', () => {
     });
     expect(result.bytes.subarray(0, 5).toString('ascii')).toBe('%PDF-');
     expect(result.bytes.length).toBeLessThan(12 * 1024 * 1024);
-    expect(result.pageCount).toBeGreaterThan(0);
+    const physicalPages = result.bytes.toString('latin1').match(/\/Type\s*\/Page\b/g) ?? [];
+    expect(result.pageCount).toBe(1);
+    expect(physicalPages).toHaveLength(result.pageCount);
   });
 });
