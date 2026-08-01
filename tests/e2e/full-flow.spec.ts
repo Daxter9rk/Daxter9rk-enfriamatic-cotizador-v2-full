@@ -1,18 +1,12 @@
 import {readFile} from 'node:fs/promises';
 import {expect, test, type Page} from '@playwright/test';
 
-const admin = {
-  email: 'admin@enfriamatic.local',
-  password: 'DevOnly!Enfriamatic2026',
-};
-const operator = {
-  email: 'operador@enfriamatic.local',
-  password: 'DevOnly!Enfriamatic2026',
-};
+const admin = {email: 'admin@enfriamatic.local', password: 'DevOnly!Enfriamatic2026'};
+const operator = {email: 'operador@enfriamatic.local', password: 'DevOnly!Enfriamatic2026'};
 
 async function login(page: Page, credentials = admin) {
   await page.goto('/', {waitUntil: 'domcontentloaded'});
-  await expect(page.getByRole('heading', {name: /cotizaciones técnicas/i})).toBeVisible();
+  await expect(page.getByRole('heading', {name: /acceso al sistema/i})).toBeVisible();
   await page.getByTestId('login-email').fill(credentials.email);
   await page.getByTestId('login-password').fill(credentials.password);
   await page.getByTestId('login-submit').click();
@@ -24,22 +18,56 @@ async function logout(page: Page) {
   await expect(page.getByTestId('login-submit')).toBeVisible();
 }
 
-test('flujo integral admin → operador → PDF → auditoría → corrección', async ({page}) => {
+async function createCatalogItem(
+  page: Page,
+  input: {code: string; type: 'product' | 'service'; name: string; price: string},
+) {
+  await page.getByRole('button', {name: 'Nuevo artículo'}).click();
+  const dialog = page.getByRole('dialog', {name: 'Nuevo artículo comercial'});
+  await dialog.getByLabel('Código').fill(input.code);
+  await dialog.getByLabel('Tipo').selectOption(input.type);
+  await dialog.getByLabel('Nombre').fill(input.name);
+  await dialog.getByLabel('Descripción').fill(`${input.name} para validación integral.`);
+  await dialog.getByLabel('Categoría').fill(input.type === 'product' ? 'Repuestos' : 'Servicios');
+  await dialog.getByLabel('Unidad').fill(input.type === 'product' ? 'pieza' : 'servicio');
+  await dialog.getByLabel('Precio base (MXN)').fill(input.price);
+  await dialog.getByRole('button', {name: 'Guardar artículo'}).click();
+  await expect(page.getByRole('heading', {name: input.name})).toBeVisible();
+}
+
+test('flujo integral catálogo → cotización → PDF → sent → accepted → corrección', async ({
+  page,
+}) => {
   const suffix = String(Date.now()).slice(-7);
+  const productName = `Producto E2E ${suffix}`;
+  const serviceName = `Servicio E2E ${suffix}`;
   const clientName = `Cliente E2E ${suffix}`;
   const siteName = `Planta E2E ${suffix}`;
   const equipmentName = `Chiller E2E ${suffix}`;
   const requestTitle = `Diagnóstico E2E ${suffix}`;
 
   await login(page);
+  await page.getByRole('link', {name: 'Catálogo comercial', exact: true}).click();
+  await createCatalogItem(page, {
+    code: `PROD-E2E-${suffix}`,
+    type: 'product',
+    name: productName,
+    price: '10000',
+  });
+  await createCatalogItem(page, {
+    code: `SERV-E2E-${suffix}`,
+    type: 'service',
+    name: serviceName,
+    price: '2000',
+  });
 
-  await page.getByRole('link', {name: 'Clientes'}).click();
+  await page.getByRole('link', {name: 'Clientes', exact: true}).click();
   await page.getByTestId('new-clients').click();
   await page.getByTestId('clients-name').fill(clientName);
   await page.getByRole('button', {name: 'Guardar'}).click();
   await expect(page.getByRole('heading', {name: clientName})).toBeVisible();
 
-  await page.getByRole('link', {name: 'Instalaciones'}).click();
+  await page.getByRole('link', {name: 'Instalaciones', exact: true}).click();
   await page.getByTestId('new-sites').click();
   await page.getByLabel('Cliente').selectOption({label: clientName});
   await page.getByTestId('sites-name').fill(siteName);
@@ -50,7 +78,7 @@ test('flujo integral admin → operador → PDF → auditoría → corrección',
   await page.getByRole('button', {name: 'Guardar'}).click();
   await expect(page.getByRole('heading', {name: siteName})).toBeVisible();
 
-  await page.getByRole('link', {name: 'Equipos'}).click();
+  await page.getByRole('link', {name: 'Equipos', exact: true}).click();
   await page.getByTestId('new-equipment').click();
   await page.getByLabel('Cliente').selectOption({label: clientName});
   await page.getByLabel('Instalación').selectOption({label: siteName});
@@ -59,7 +87,7 @@ test('flujo integral admin → operador → PDF → auditoría → corrección',
   await page.getByRole('button', {name: 'Guardar'}).click();
   await expect(page.getByRole('heading', {name: equipmentName})).toBeVisible();
 
-  await page.getByRole('link', {name: 'Solicitudes'}).click();
+  await page.getByRole('link', {name: 'Solicitudes', exact: true}).click();
   await page.getByTestId('new-request').click();
   await page.getByLabel('Cliente').selectOption({label: clientName});
   await page.getByLabel('Instalación').selectOption({label: siteName});
@@ -72,26 +100,33 @@ test('flujo integral admin → operador → PDF → auditoría → corrección',
   await logout(page);
 
   await login(page, operator);
-  await page.getByRole('link', {name: 'Mis solicitudes'}).click();
+  await page.getByRole('link', {name: 'Mis solicitudes', exact: true}).click();
   await page.getByText(requestTitle).click();
   await page.getByRole('button', {name: 'Iniciar solicitud'}).click();
-
-  await page.getByRole('link', {name: 'Cotizaciones'}).click();
+  await page.getByRole('link', {name: 'Cotizaciones', exact: true}).click();
   await page.getByTestId('new-quote').click();
   await page.getByTestId('quote-request').selectOption({label: requestTitle});
-  await page.getByRole('button', {name: 'Crear borrador'}).click();
-  await page.getByTestId('quote-item-description').fill('Diagnóstico técnico y pruebas');
+  await page.getByRole('button', {name: 'Crear cotización'}).click();
+
+  await page.getByRole('button', {name: `Agregar ${productName}`}).click();
+  await page.getByRole('button', {name: `Agregar ${serviceName}`}).click();
+  await page.getByRole('button', {name: 'Editar'}).first().click();
+  await page.getByTestId('quote-item-description').fill(`${productName} ajustado en partida`);
+  await page.getByRole('button', {name: 'Guardar cambios de partida'}).click();
+  await expect(page.getByRole('button', {name: 'Agregar partida manual'})).toBeVisible();
+
+  await page.getByTestId('quote-item-description').fill('Diagnóstico técnico manual');
   await page.getByTestId('quote-item-price').fill('2500');
   await page.getByRole('combobox', {name: 'Descuento', exact: true}).selectOption('percentage');
   await page.getByLabel('Valor descuento').fill('10');
-  await page.getByRole('button', {name: 'Agregar partida'}).click();
-  await expect(page.getByText('$2,610.00')).toBeVisible();
+  await page.getByRole('button', {name: 'Agregar partida manual'}).click();
+  await expect(page.getByText(/\$16,530\.00/)).toBeVisible();
   await page.getByRole('button', {name: 'Vista previa'}).click();
   await expect(page.getByText(/BORRADOR/)).toBeVisible();
   await page.getByRole('button', {name: 'Cerrar vista previa'}).click();
   await page.getByTestId('issue-quote').click();
   await expect(page.getByText(/emitida correctamente/i)).toBeVisible({timeout: 30_000});
-  await expect(page.getByRole('button', {name: 'Agregar partida'})).toHaveCount(0);
+  await expect(page.getByRole('button', {name: 'Agregar partida manual'})).toHaveCount(0);
 
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', {name: 'Descargar PDF'}).click();
@@ -100,17 +135,30 @@ test('flujo integral admin → operador → PDF → auditoría → corrección',
   if (!downloadPath) throw new Error('Playwright no proporcionó la ruta de descarga.');
   const bytes = await readFile(downloadPath);
   expect(bytes.subarray(0, 5).toString('ascii')).toBe('%PDF-');
-  const issuedFolio = (await page.getByRole('dialog').getByRole('heading').textContent()) ?? '';
+  const issuedFolio =
+    (await page
+      .getByRole('dialog')
+      .getByRole('heading', {name: /^COT-\d{4}-\d{6}$/})
+      .textContent()) ?? '';
   expect(issuedFolio).toMatch(/^COT-\d{4}-\d{6}$/);
+
+  await page.getByRole('button', {name: 'Marcar enviada'}).click();
+  await page.getByRole('button', {name: 'Confirmar'}).click();
+  await expect(page.getByText(/estado actualizado a enviada/i)).toBeVisible();
   await page.getByRole('dialog').getByRole('button', {name: 'Cerrar', exact: true}).click();
   await logout(page);
 
   await login(page);
-  await page.getByRole('link', {name: 'Actividad'}).click();
-  await expect(page.getByText(new RegExp(`${issuedFolio} emitida`, 'i'))).toBeVisible();
-  await expect(page.getByText('quote.issued')).toBeVisible();
-  await page.getByRole('link', {name: 'Cotizaciones'}).click();
+  await page.getByRole('link', {name: 'Cotizaciones', exact: true}).click();
   await page.getByRole('heading', {name: issuedFolio}).click();
+  await page.getByRole('button', {name: 'Marcar aceptada'}).click();
+  await page.getByRole('button', {name: 'Confirmar'}).click();
+  await expect(page.getByText(/estado actualizado a aceptada/i)).toBeVisible();
   await page.getByRole('button', {name: 'Crear corrección'}).click();
   await expect(page.getByText(/corrección creada/i)).toBeVisible({timeout: 15_000});
+  await page.getByRole('dialog').getByRole('button', {name: 'Cerrar', exact: true}).click();
+  await page.getByRole('link', {name: 'Actividad', exact: true}).click();
+  await expect(page.getByText('quote.sent')).toBeVisible();
+  await expect(page.getByText('quote.accepted')).toBeVisible();
+  await expect(page.getByText('quote.correction_created')).toBeVisible();
 });
