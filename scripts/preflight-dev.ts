@@ -1,8 +1,8 @@
-import {execFileSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import {DEV_PROJECT_ID} from './dev-seed-core';
+import {runProcess} from './portable-process';
 
 const expectedRoot = 'enfriamatic-cotizador-v2-full';
 const expectedRemote = 'https://github.com/Daxter9rk/Daxter9rk-enfriamatic-cotizador-v2-full.git';
@@ -14,12 +14,6 @@ const requiredEnv = [
   'VITE_FIREBASE_MESSAGING_SENDER_ID',
   'VITE_FIREBASE_APP_ID',
 ];
-const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-
-function run(command: string, args: string[]): string {
-  return execFileSync(command, args, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']}).trim();
-}
-
 const root = process.cwd();
 if (
   path.basename(root) !== expectedRoot ||
@@ -32,18 +26,18 @@ const packageJson = JSON.parse(readFileSync(path.join(root, 'package.json'), 'ut
 };
 if (packageJson.name !== expectedRoot)
   throw new Error('El package name no corresponde al proyecto autorizado.');
-if (run('git', ['remote', 'get-url', 'origin']) !== expectedRemote)
+if (runProcess('git', ['remote', 'get-url', 'origin']) !== expectedRemote)
   throw new Error('Remoto Git no autorizado.');
-if (run('git', ['status', '--porcelain']))
+if (runProcess('git', ['status', '--porcelain']))
   throw new Error('El árbol Git contiene cambios previos o no confirmados.');
-const firebaseProject = run(npx, ['-y', 'firebase-tools@latest', 'use']);
+const firebaseProject = runProcess('npx', ['-y', 'firebase-tools@latest', 'use']);
 if (firebaseProject !== DEV_PROJECT_ID || firebaseProject.toLowerCase().includes('prod'))
   throw new Error('Firebase activo no autorizado.');
-if (!run(npx, ['-y', 'firebase-tools@latest', 'login:list']).includes('Logged in as'))
+if (!runProcess('npx', ['-y', 'firebase-tools@latest', 'login:list']).includes('Logged in as'))
   throw new Error('Firebase CLI no está autenticado.');
-if (!run('gcloud', ['auth', 'list', '--filter=status:ACTIVE', '--format=value(account)']))
+if (!runProcess('gcloud', ['auth', 'list', '--filter=status:ACTIVE', '--format=value(account)']))
   throw new Error('gcloud no está autenticado.');
-run('gh', ['auth', 'status']);
+runProcess('gh', ['auth', 'status']);
 
 const envPath = path.join(root, '.env.local');
 const envText = readFileSync(envPath, 'utf8');
@@ -58,5 +52,5 @@ if (envEntries.VITE_FIREBASE_PROJECT_ID !== DEV_PROJECT_ID)
   throw new Error('VITE_FIREBASE_PROJECT_ID no coincide con DEV autorizado.');
 
 console.log(
-  `Preflight DEV correcto: ${expectedRoot} · ${DEV_PROJECT_ID} · ${run('git', ['branch', '--show-current'])}`,
+  `Preflight DEV correcto: ${expectedRoot} · ${DEV_PROJECT_ID} · ${runProcess('git', ['branch', '--show-current'])}`,
 );
