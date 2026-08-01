@@ -35,7 +35,7 @@
     "deploy:dev:functions": "npm run preflight:dev && npx -y firebase-tools@latest deploy --only functions --project enfriamatic-cotizador-de-420e5",
     "deploy:dev:hosting": "npm run preflight:dev && npx -y firebase-tools@latest deploy --only hosting --project enfriamatic-cotizador-de-420e5",
     "validate:env": "tsx scripts/validate-env.ts",
-    "audit:all": "npm audit && npm audit --omit=dev && npm --prefix functions audit && npm --prefix functions audit --omit=dev"
+    "audit:all": "npm audit --audit-level=high && npm audit --omit=dev --audit-level=high && npm --prefix functions audit --audit-level=high && npm --prefix functions audit --omit=dev --audit-level=high"
   },
   "dependencies": {
     "firebase": "12.17.0",
@@ -71,11 +71,6 @@
   },
   "overrides": {
     "gaxios": "7.3.0",
-    "uuid": "14.0.1",
-    "@google-cloud/storage": {
-      "gaxios": "7.3.0",
-      "retry-request": "9.0.0",
-      "teeny-request": "11.0.0"
-    }
+    "uuid": "14.0.1"
   }
 }

@@ -385,11 +385,19 @@ export const issueQuote = onCall(
       };
     } catch (error) {
       const code = safeErrorCode(error);
+      const rawProviderCode =
+        error && typeof error === 'object' && 'code' in error ? error.code : null;
+      const providerCode =
+        (typeof rawProviderCode === 'string' || typeof rawProviderCode === 'number') &&
+        /^[a-z0-9_-]{1,32}$/i.test(String(rawProviderCode))
+          ? String(rawProviderCode)
+          : null;
       logger.error('Quote issuance failed', {
         actorId: actor.uid,
         quoteId,
         code,
         stage,
+        providerCode,
         durationMs: Date.now() - startedAt,
       });
       if (reserved) {
