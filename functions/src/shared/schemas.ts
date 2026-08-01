@@ -27,6 +27,22 @@ export const quoteIdSchema = z.object({
   quoteId: z.string().min(1).max(128),
 });
 
+export const transitionQuoteSchema = z
+  .object({
+    quoteId: z.string().min(1).max(128),
+    to: z.enum(['sent', 'accepted', 'rejected', 'cancelled']),
+    reason: z.string().trim().min(5).max(1000).nullable().optional(),
+  })
+  .superRefine((value, context) => {
+    if ((value.to === 'rejected' || value.to === 'cancelled') && !value.reason) {
+      context.addIssue({
+        code: 'custom',
+        path: ['reason'],
+        message: 'A reason is required for rejection or cancellation.',
+      });
+    }
+  });
+
 export const quoteItemSchema = z.object({
   position: z.number().int().min(0).max(999),
   quantity: z.number().positive().max(1_000_000),

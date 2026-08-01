@@ -1,5 +1,5 @@
 import {lazy, Suspense} from 'react';
-import {BrowserRouter, Navigate, Route, Routes} from 'react-router-dom';
+import {Redirect, Route, Switch} from 'wouter';
 import {useAuth} from './providers/AuthProvider';
 import {StatePanel} from '../components/StatePanel';
 import {AppShell} from '../layouts/AppShell';
@@ -27,6 +27,11 @@ const QuotesPage = lazy(() =>
 const CatalogsPage = lazy(() =>
   import('../features/catalogs/CatalogsPage').then((module) => ({default: module.CatalogsPage})),
 );
+const CommercialCatalogPage = lazy(() =>
+  import('../features/commercial-catalog/CommercialCatalogPage').then((module) => ({
+    default: module.CommercialCatalogPage,
+  })),
+);
 const ActivityPage = lazy(() =>
   import('../features/activity/ActivityPage').then((module) => ({default: module.ActivityPage})),
 );
@@ -48,55 +53,50 @@ export function App() {
     );
   }
   if (state === 'anonymous') {
-    return (
-      <BrowserRouter>
-        <Routes>
-          <Route path="*" element={<LoginPage />} />
-        </Routes>
-      </BrowserRouter>
-    );
+    return <LoginPage />;
   }
   if (state !== 'authenticated') {
     return <BlockedPage />;
   }
 
   return (
-    <BrowserRouter>
-      <Suspense
-        fallback={
-          <main className="centered-page">
-            <StatePanel kind="loading" title="Cargando módulo…" />
-          </main>
-        }
-      >
-        <Routes>
-          <Route element={<AppShell />}>
-            <Route index element={<DashboardPage />} />
-            <Route path="clients" element={<MasterDataPage kind="clients" />} />
-            <Route path="sites" element={<MasterDataPage kind="sites" />} />
-            <Route path="equipment" element={<MasterDataPage kind="equipment" />} />
-            <Route path="requests" element={<RequestsPage />} />
-            <Route path="requests/:requestId" element={<RequestsPage />} />
-            <Route path="quotes" element={<QuotesPage />} />
-            <Route path="activity" element={<ActivityPage />} />
-            <Route path="manual" element={<ManualPage />} />
-            {profile?.role === 'admin' ? (
-              <>
-                <Route path="users" element={<UsersPage />} />
-                <Route path="catalogs" element={<CatalogsPage />} />
-                <Route path="settings" element={<SettingsPage />} />
-              </>
-            ) : (
-              <>
-                <Route path="users" element={<Navigate to="/" replace />} />
-                <Route path="catalogs" element={<Navigate to="/" replace />} />
-                <Route path="settings" element={<Navigate to="/" replace />} />
-              </>
-            )}
-            <Route path="*" element={<NotFoundPage />} />
+    <Suspense
+      fallback={
+        <main className="centered-page">
+          <StatePanel kind="loading" title="Cargando módulo…" />
+        </main>
+      }
+    >
+      <AppShell>
+        <Switch>
+          <Route path="/" component={DashboardPage} />
+          <Route path="/clients">
+            <MasterDataPage kind="clients" />
           </Route>
-        </Routes>
-      </Suspense>
-    </BrowserRouter>
+          <Route path="/sites">
+            <MasterDataPage kind="sites" />
+          </Route>
+          <Route path="/equipment">
+            <MasterDataPage kind="equipment" />
+          </Route>
+          <Route path="/requests/:requestId" component={RequestsPage} />
+          <Route path="/requests" component={RequestsPage} />
+          <Route path="/quotes" component={QuotesPage} />
+          <Route path="/commercial-catalog" component={CommercialCatalogPage} />
+          <Route path="/activity" component={ActivityPage} />
+          <Route path="/manual" component={ManualPage} />
+          <Route path="/users">
+            {profile?.role === 'admin' ? <UsersPage /> : <Redirect to="/" replace />}
+          </Route>
+          <Route path="/catalogs">
+            {profile?.role === 'admin' ? <CatalogsPage /> : <Redirect to="/" replace />}
+          </Route>
+          <Route path="/settings">
+            {profile?.role === 'admin' ? <SettingsPage /> : <Redirect to="/" replace />}
+          </Route>
+          <Route component={NotFoundPage} />
+        </Switch>
+      </AppShell>
+    </Suspense>
   );
 }

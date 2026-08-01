@@ -25,8 +25,11 @@ export const createCorrection = onCall(
         throw new HttpsError('not-found', 'The original quote does not exist.');
       }
       const originalQuote = originalQuoteSnapshot.data() ?? {};
-      if (originalQuote.status !== 'issued') {
-        throw new HttpsError('failed-precondition', 'Only issued quotes can be corrected.');
+      if (!['issued', 'sent', 'accepted', 'rejected'].includes(String(originalQuote.status))) {
+        throw new HttpsError(
+          'failed-precondition',
+          'Only emitted commercial quotes can be corrected.',
+        );
       }
       const originalRequestRef = firestore.doc(`requests/${String(originalQuote.requestId)}`);
       const originalRequestSnapshot = await transaction.get(originalRequestRef);

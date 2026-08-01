@@ -58,6 +58,8 @@ beforeEach(async () => {
       setDoc(doc(db, 'quotes/issued'), quote('operator', 'issued', true)),
       setDoc(doc(db, 'quotes/draft'), quote('operator', 'draft', false)),
       setDoc(doc(db, 'quotes/other-draft'), quote('other', 'draft', false, 'other')),
+      setDoc(doc(db, 'catalogItems/PROD-ACTIVE'), catalogItem('PROD-ACTIVE', 'active')),
+      setDoc(doc(db, 'catalogItems/PROD-INACTIVE'), catalogItem('PROD-INACTIVE', 'inactive')),
       setDoc(doc(db, 'settings/companyProfile'), companyProfile()),
       setDoc(doc(db, 'settings/quoteDefaults'), quoteDefaults()),
       setDoc(doc(db, 'settings/internalSecret'), {secret: 'backend-only'}),
@@ -71,6 +73,76 @@ beforeEach(async () => {
         status: 'ready',
       }),
     ]);
+  });
+});
+
+describe('Firestore rules — commercial catalog', () => {
+  it('lets operators read only active items with a constrained query', async () => {
+    const db = environment.authenticatedContext('operator').firestore();
+    await assertSucceeds(getDoc(doc(db, 'catalogItems/PROD-ACTIVE')));
+    await assertFails(getDoc(doc(db, 'catalogItems/PROD-INACTIVE')));
+    await assertSucceeds(
+      getDocs(query(collection(db, 'catalogItems'), where('status', '==', 'active'), limit(100))),
+    );
+    await assertFails(getDocs(query(collection(db, 'catalogItems'), limit(100))));
+    await assertFails(updateDoc(doc(db, 'catalogItems/PROD-ACTIVE'), {basePrice: 1}));
+  });
+
+  it('lets admins create and edit valid items but never change code or delete', async () => {
+    const db = environment.authenticatedContext('admin').firestore();
+    await assertSucceeds(
+      setDoc(doc(db, 'catalogItems/SERV-NEW'), {
+        ...catalogItem('SERV-NEW', 'active', 'service'),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        createdBy: 'admin',
+        updatedBy: 'admin',
+      }),
+    );
+    await assertSucceeds(
+      updateDoc(doc(db, 'catalogItems/SERV-NEW'), {
+        basePrice: 250,
+        updatedAt: serverTimestamp(),
+        updatedBy: 'admin',
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(db, 'catalogItems/SERV-NEW'), {
+        code: 'SERV-HIJACK',
+        updatedAt: serverTimestamp(),
+        updatedBy: 'admin',
+      }),
+    );
+    await assertFails(deleteDoc(doc(db, 'catalogItems/SERV-NEW')));
+  });
+
+  it('requires an active catalog snapshot on create and preserves it on later edits', async () => {
+    const db = environment.authenticatedContext('operator').firestore();
+    const snapshot = catalogSnapshot('PROD-ACTIVE');
+    const reference = doc(db, 'quotes/draft/items/from-catalog');
+    await assertSucceeds(
+      setDoc(reference, {
+        ...item(),
+        catalogItemId: 'PROD-ACTIVE',
+        catalogCode: 'PROD-ACTIVE',
+        catalogType: 'product',
+        catalogSnapshot: snapshot,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await environment.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'catalogItems/PROD-ACTIVE'), {status: 'inactive'});
+    });
+    await assertSucceeds(
+      updateDoc(reference, {description: 'Descripción editada', updatedAt: serverTimestamp()}),
+    );
+    await assertFails(
+      updateDoc(reference, {
+        catalogSnapshot: {...snapshot, basePrice: 1},
+        updatedAt: serverTimestamp(),
+      }),
+    );
   });
 });
 
@@ -533,7 +605,6 @@ function item() {
     position: 0,
     quantity: 1,
     unit: 'servicio',
-    catalogItemId: null,
     description: 'Diagnóstico',
     originalUnitPrice: 100,
     discountType: 'none',
@@ -544,6 +615,35 @@ function item() {
     taxable: true,
     createdAt: new Date(),
     updatedAt: new Date(),
+  };
+}
+
+function catalogSnapshot(code: string) {
+  return {
+    code,
+    type: 'product',
+    name: 'Producto de prueba',
+    description: 'Descripción del producto de prueba',
+    category: 'Repuestos',
+    unit: 'pieza',
+    brand: 'Marca Demo',
+    model: 'Modelo Demo',
+    basePrice: 100,
+    taxable: true,
+  };
+}
+
+function catalogItem(
+  code: string,
+  status: 'active' | 'inactive',
+  type: 'product' | 'service' = 'product',
+) {
+  return {
+    ...catalogSnapshot(code),
+    type,
+    status,
+    searchTokens: ['producto', 'prueba'],
+    ...audit(),
   };
 }
 

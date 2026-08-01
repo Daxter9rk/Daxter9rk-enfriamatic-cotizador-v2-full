@@ -1,5 +1,5 @@
-import {useState} from 'react';
-import {NavLink, Outlet} from 'react-router-dom';
+import {useState, type ReactNode} from 'react';
+import {Link, useLocation} from 'wouter';
 import {useAuth} from '../app/providers/AuthProvider';
 import logo from '../assets/brand/enfriamatic-logo-transparent.png';
 
@@ -11,6 +11,7 @@ const adminLinks = [
   ['/equipment', 'Equipos'],
   ['/requests', 'Solicitudes'],
   ['/quotes', 'Cotizaciones'],
+  ['/commercial-catalog', 'Catálogo comercial'],
   ['/catalogs', 'Catálogos'],
   ['/activity', 'Actividad'],
   ['/settings', 'Configuración'],
@@ -24,12 +25,14 @@ const operatorLinks = [
   ['/sites', 'Instalaciones'],
   ['/equipment', 'Equipos'],
   ['/quotes', 'Cotizaciones'],
+  ['/commercial-catalog', 'Catálogo comercial'],
   ['/activity', 'Historial'],
   ['/manual', 'Manual'],
 ] as const;
 
-export function AppShell() {
+export function AppShell({children}: {children: ReactNode}) {
   const {profile, logout} = useAuth();
+  const [location] = useLocation();
   const [open, setOpen] = useState(false);
   const links = profile?.role === 'admin' ? adminLinks : operatorLinks;
 
@@ -53,15 +56,18 @@ export function AppShell() {
         </div>
         <nav aria-label="Navegación principal">
           {links.map(([href, label]) => (
-            <NavLink
+            <Link
               key={href}
-              to={href}
-              end={href === '/'}
+              href={href}
               onClick={() => setOpen(false)}
-              className={({isActive}) => (isActive ? 'active' : undefined)}
+              className={
+                location === href || (href !== '/' && location.startsWith(`${href}/`))
+                  ? 'active'
+                  : undefined
+              }
             >
               {label}
-            </NavLink>
+            </Link>
           ))}
         </nav>
         <div className="sidebar__account">
@@ -79,9 +85,7 @@ export function AppShell() {
           onClick={() => setOpen(false)}
         />
       )}
-      <main className="app-main">
-        <Outlet />
-      </main>
+      <main className="app-main">{children}</main>
     </div>
   );
 }

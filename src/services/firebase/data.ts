@@ -25,6 +25,7 @@ export type DomainCollection =
   | 'requests'
   | 'quotes'
   | 'catalogs'
+  | 'catalogItems'
   | 'settings'
   | 'notifications';
 
@@ -140,6 +141,7 @@ export const constraints = {
   authorizedFor: (uid: string) => where('operatorIds', 'array-contains', uid),
   notificationsFor: (uid: string) => where('userId', '==', uid),
   auditFor: (uid: string) => where('actorId', '==', uid),
+  activeOnly: () => where('status', '==', 'active'),
 };
 
 export async function callFunction<TInput, TOutput>(name: string, data: TInput): Promise<TOutput> {
