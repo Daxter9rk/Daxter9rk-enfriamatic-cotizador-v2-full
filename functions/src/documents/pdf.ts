@@ -240,10 +240,15 @@ export async function generateQuotePdf(input: QuotePdfInput): Promise<GeneratedP
       .fillOpacity(1)
       .fillColor('#647680')
       .fontSize(7)
-      .text(`Página ${pageIndex + 1} de ${range.count}`, 44, document.page.height - 38, {
-        width: 524,
-        align: 'right',
-      });
+      .text(
+        `Página ${pageIndex + 1} de ${range.count}`,
+        44,
+        document.page.height - document.page.margins.bottom - 10,
+        {
+          width: 524,
+          align: 'right',
+        },
+      );
   }
 
   const completion = new Promise<Buffer>((resolve, reject) => {
