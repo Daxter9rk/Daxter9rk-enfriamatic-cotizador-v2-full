@@ -29,4 +29,4 @@ La advertencia de Vite por el chunk de Firebase (aprox. 558 kB) es de rendimient
 
 ## Validación humana/preview
 
-Se completará con URL, smoke autenticado, persistencia y compatibilidad read-only de Hosting live después del despliegue exclusivo a DEV.
+Health check, preview y live respondieron HTTP 200; el canal correcto fue renovado y la fecha de release live no cambió. El smoke autenticado y la regresión read-only de live quedan pendientes por ausencia de una sesión/credencial DEV autorizada en el navegador disponible. No se sustituyó este control con una sesión privilegiada artificial.
