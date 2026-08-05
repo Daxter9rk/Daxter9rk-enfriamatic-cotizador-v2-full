@@ -1,5 +1,5 @@
-import {useMemo, useState, type FormEvent} from 'react';
-import {Link} from 'wouter';
+import {useEffect, useMemo, useState, type FormEvent} from 'react';
+import {Link, useSearch} from 'wouter';
 import {useAuth} from '../../app/providers/AuthProvider';
 import {Modal} from '../../components/Modal';
 import {PageHeader} from '../../components/PageHeader';
@@ -12,6 +12,7 @@ import {QuoteEditor} from './QuoteEditor';
 
 export function QuotesPage() {
   const {profile} = useAuth();
+  const search = useSearch();
   const operatorFilter = profile?.role === 'operator' ? [constraints.assignedTo(profile.uid)] : [];
   const masterDataFilter =
     profile?.role === 'operator' ? [constraints.authorizedFor(profile.uid)] : [];
@@ -23,8 +24,20 @@ export function QuotesPage() {
   const [selected, setSelected] = useState<Quote | null>(null);
   const [creating, setCreating] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [view, setView] = useState<'cards' | 'list' | 'table'>(
+    () =>
+      (localStorage.getItem('enfriamatic:quotes-view') as 'cards' | 'list' | 'table') || 'cards',
+  );
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const quoteId = new URLSearchParams(search).get('quote');
+    if (quoteId && !selected) {
+      const target = quotes.data.find((quote) => quote.id === quoteId);
+      if (target) setSelected(target);
+    }
+  }, [quotes.data, search, selected]);
 
   const validRequests = requests.data.filter((request) =>
     ['assigned', 'in_progress'].includes(request.status),
@@ -121,6 +134,21 @@ export function QuotesPage() {
           </select>
         </label>
         <span>{visible.length} cotizaciones</span>
+        <div className="view-toggle" role="group" aria-label="Vista de cotizaciones">
+          {(['list', 'cards', 'table'] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              className={view === option ? 'active' : ''}
+              onClick={() => {
+                setView(option);
+                localStorage.setItem('enfriamatic:quotes-view', option);
+              }}
+            >
+              {option === 'list' ? 'Lista' : option === 'cards' ? 'Tarjetas' : 'Tabla'}
+            </button>
+          ))}
+        </div>
       </section>
       {quotes.error ? (
         <StatePanel kind="error" title="No fue posible cargar cotizaciones">
@@ -131,7 +159,16 @@ export function QuotesPage() {
       ) : visible.length === 0 ? (
         <StatePanel title="No hay cotizaciones para este filtro" />
       ) : (
-        <section className="record-grid">
+        <section className={`record-grid record-grid--${view}`}>
+          {view === 'table' && (
+            <div className="record-table-head">
+              <span>Folio</span>
+              <span>Cliente</span>
+              <span>Estado</span>
+              <span>Total</span>
+              <span>Actualización</span>
+            </div>
+          )}
           {visible.map((quote) => (
             <button
               className="record-card record-card--button"
@@ -140,8 +177,10 @@ export function QuotesPage() {
               data-testid={`quote-${quote.id}`}
             >
               <div className="record-card__top">
-                <span className={`badge badge--${quote.status}`}>{quote.status}</span>
-                <span>{quote.documentStatus}</span>
+                <span className={`badge badge--${quote.status}`}>
+                  {quoteStatusLabel(quote.status)}
+                </span>
+                <span>{documentStatusLabel(quote.documentStatus)}</span>
               </div>
               <h2>{quote.folio || 'Borrador sin folio'}</h2>
               <p>
@@ -197,6 +236,31 @@ export function QuotesPage() {
       )}
     </>
   );
+}
+
+function quoteStatusLabel(status: Quote['status']) {
+  return (
+    {
+      draft: 'Borrador',
+      issued: 'Emitida',
+      sent: 'Enviada',
+      accepted: 'Aceptada',
+      rejected: 'Rechazada',
+      cancelled: 'Cancelada',
+      expired: 'Vencida',
+    } as const
+  )[status];
+}
+
+function documentStatusLabel(status: Quote['documentStatus']) {
+  return (
+    {
+      not_generated: 'Sin PDF',
+      generating: 'Generando PDF',
+      ready: 'PDF listo',
+      failed: 'PDF con fallo',
+    } as const
+  )[status];
 }
 
 function QuoteCreationGuide() {
