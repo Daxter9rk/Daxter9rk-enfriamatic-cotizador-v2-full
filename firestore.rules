@@ -715,6 +715,8 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'code', 'type', 'name', 'description', 'category', 'unit',
           'brand', 'model', 'basePrice', 'taxable', 'status', 'searchTokens',
+          'imageStoragePath', 'imageFileName', 'imageMimeType',
+          'imageSizeBytes', 'imageStatus',
           'dataOrigin', 'seedVersion', 'seedTag',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
@@ -732,6 +734,19 @@ service cloud.firestore {
         && data.status in ['active', 'inactive']
         && data.searchTokens is list
         && data.searchTokens.size() <= 50
+        && validNullableString(data, 'imageStoragePath', 500)
+        && validNullableString(data, 'imageFileName', 160)
+        && validNullableString(data, 'imageMimeType', 80)
+        && (!(data.keys().hasAny(['imageSizeBytes']))
+          || data.imageSizeBytes == null
+          || (data.imageSizeBytes is int && data.imageSizeBytes > 0
+            && data.imageSizeBytes <= 5242880))
+        && (!(data.keys().hasAny(['imageStatus']))
+          || data.imageStatus == null
+          || data.imageStatus in ['pending', 'ready', 'failed'])
+        && (!(data.keys().hasAny(['imageMimeType']))
+          || data.imageMimeType == null
+          || data.imageMimeType in ['image/jpeg', 'image/png', 'image/webp'])
         && validSeedMetadata(data);
     }
 

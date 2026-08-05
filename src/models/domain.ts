@@ -209,6 +209,11 @@ export interface CatalogItem extends AuditFields {
   taxable: boolean;
   status: CatalogItemStatus;
   searchTokens: string[];
+  imageStoragePath?: string | null;
+  imageFileName?: string | null;
+  imageMimeType?: string | null;
+  imageSizeBytes?: number | null;
+  imageStatus?: 'pending' | 'ready' | 'failed' | null;
 }
 
 export interface CatalogItemSnapshot {

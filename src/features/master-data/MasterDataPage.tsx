@@ -1,4 +1,5 @@
-import {useMemo, useState, type FormEvent} from 'react';
+import {useEffect, useMemo, useState, type FormEvent} from 'react';
+import {Link, useLocation, useSearch} from 'wouter';
 import {useAuth} from '../../app/providers/AuthProvider';
 import {Modal} from '../../components/Modal';
 import {PageHeader} from '../../components/PageHeader';
@@ -38,6 +39,8 @@ const copy = {
 
 export function MasterDataPage({kind}: {kind: EntityKind}) {
   const {profile} = useAuth();
+  const searchQuery = useSearch();
+  const [, navigate] = useLocation();
   const operatorConstraints =
     profile?.role === 'operator' ? [constraints.authorizedFor(profile.uid)] : [];
   const records = useCollection<MasterRecord>(kind, operatorConstraints);
@@ -47,7 +50,21 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
   const [editing, setEditing] = useState<MasterRecord | 'new' | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [view, setView] = useState<'cards' | 'list' | 'table'>(
+    () =>
+      (localStorage.getItem(`enfriamatic-view-${kind}`) as 'cards' | 'list' | 'table') ?? 'cards',
+  );
   const labels = copy[kind];
+
+  useEffect(() => {
+    if (new URLSearchParams(searchQuery).get('new') === '1' && profile?.role === 'admin')
+      setEditing('new');
+  }, [searchQuery, profile]);
+
+  const closeEditor = () => {
+    setEditing(null);
+    if (new URLSearchParams(searchQuery).has('new')) navigate(`/${kind}`, {replace: true});
+  };
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -75,7 +92,7 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
       } else if (editing) {
         await updateDocument(kind, editing.id, data, profile.uid);
       }
-      setEditing(null);
+      closeEditor();
       await Promise.all([records.reload(), clients.reload(), sites.reload()]);
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'No se pudo guardar el registro.');
@@ -114,6 +131,20 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
             placeholder="Nombre, categoría, marca…"
           />
         </label>
+        <div className="view-toggle" aria-label="Tipo de vista">
+          {(['cards', 'list', 'table'] as const).map((option) => (
+            <button
+              key={option}
+              className={view === option ? 'active' : undefined}
+              onClick={() => {
+                setView(option);
+                localStorage.setItem(`enfriamatic-view-${kind}`, option);
+              }}
+            >
+              {{cards: 'Tarjetas', list: 'Lista', table: 'Tabla'}[option]}
+            </button>
+          ))}
+        </div>
         <span>{filtered.length} registros</span>
       </section>
       {records.error ? (
@@ -128,7 +159,7 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
           <p>Usa los filtros o crea el primer registro.</p>
         </StatePanel>
       ) : (
-        <section className="record-grid" aria-label={labels.title}>
+        <section className={`record-grid record-grid--${view}`} aria-label={labels.title}>
           {filtered.map((record) => (
             <article className="record-card" key={record.id}>
               <div className="record-card__top">
@@ -139,7 +170,9 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
                   </button>
                 )}
               </div>
-              <h2>{record.name}</h2>
+              <h2>
+                <Link href={`/${kind}/${record.id}`}>{record.name}</Link>
+              </h2>
               {'category' in record && (
                 <p>
                   {record.category} {record.brand ? `· ${record.brand}` : ''}
@@ -154,6 +187,9 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
                 <p>Contacto: {record.contactName}</p>
               )}
               <small>ID {record.id}</small>
+              <Link className="record-card__open" href={`/${kind}/${record.id}`}>
+                Abrir detalle <span>→</span>
+              </Link>
             </article>
           ))}
         </section>
@@ -161,7 +197,7 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
       {editing && (
         <Modal
           title={`${editing === 'new' ? 'Nueva' : 'Editar'} ${labels.singular}`}
-          onClose={() => setEditing(null)}
+          onClose={closeEditor}
         >
           <MasterForm
             kind={kind}
@@ -292,6 +328,73 @@ function MasterForm({
               defaultValue={value && 'notes' in value ? value.notes : ''}
             />
           </label>
+          <h3 className="field-wide form-section-title">
+            Dirección administrativa / fiscal <span>Opcional</span>
+          </h3>
+          <label className="field-wide">
+            Calle
+            <input
+              name="billingStreet"
+              maxLength={160}
+              defaultValue={value && 'billingAddress' in value ? value.billingAddress?.street : ''}
+            />
+          </label>
+          <label>
+            Número exterior
+            <input
+              name="billingExteriorNumber"
+              maxLength={20}
+              defaultValue={
+                value && 'billingAddress' in value ? value.billingAddress?.exteriorNumber : ''
+              }
+            />
+          </label>
+          <label>
+            Número interior
+            <input
+              name="billingInteriorNumber"
+              maxLength={20}
+              defaultValue={
+                value && 'billingAddress' in value ? value.billingAddress?.interiorNumber : ''
+              }
+            />
+          </label>
+          <label>
+            Colonia
+            <input
+              name="billingNeighborhood"
+              maxLength={120}
+              defaultValue={
+                value && 'billingAddress' in value ? value.billingAddress?.neighborhood : ''
+              }
+            />
+          </label>
+          <label>
+            Ciudad
+            <input
+              name="billingCity"
+              maxLength={100}
+              defaultValue={value && 'billingAddress' in value ? value.billingAddress?.city : ''}
+            />
+          </label>
+          <label>
+            Estado
+            <input
+              name="billingState"
+              maxLength={100}
+              defaultValue={value && 'billingAddress' in value ? value.billingAddress?.state : ''}
+            />
+          </label>
+          <label>
+            Código postal
+            <input
+              name="billingPostalCode"
+              maxLength={10}
+              defaultValue={
+                value && 'billingAddress' in value ? value.billingAddress?.postalCode : ''
+              }
+            />
+          </label>
         </>
       )}
       {kind === 'sites' && (
@@ -366,6 +469,49 @@ function MasterForm({
               defaultValue={value && 'contactPhone' in value ? value.contactPhone : ''}
             />
           </label>
+          <label className="field-wide">
+            Horario de acceso
+            <input
+              name="accessSchedule"
+              maxLength={500}
+              defaultValue={value && 'accessSchedule' in value ? value.accessSchedule : ''}
+              placeholder="Lun–Vie 08:00–18:00"
+            />
+          </label>
+          <label className="field-wide">
+            Indicaciones y referencias
+            <textarea
+              name="accessInstructions"
+              maxLength={2000}
+              defaultValue={value && 'accessInstructions' in value ? value.accessInstructions : ''}
+            />
+          </label>
+          <label>
+            Latitud
+            <input
+              name="latitude"
+              type="number"
+              min={-90}
+              max={90}
+              step="any"
+              defaultValue={
+                value && 'latitude' in value && value.latitude != null ? value.latitude : ''
+              }
+            />
+          </label>
+          <label>
+            Longitud
+            <input
+              name="longitude"
+              type="number"
+              min={-180}
+              max={180}
+              step="any"
+              defaultValue={
+                value && 'longitude' in value && value.longitude != null ? value.longitude : ''
+              }
+            />
+          </label>
         </>
       )}
       {kind === 'equipment' && (
@@ -427,6 +573,36 @@ function MasterForm({
               defaultValue={value && 'technicalNotes' in value ? value.technicalNotes : ''}
             />
           </label>
+          <label className="field-wide">
+            Ubicación dentro del sitio
+            <input
+              name="locationReference"
+              maxLength={500}
+              defaultValue={value && 'locationReference' in value ? value.locationReference : ''}
+            />
+          </label>
+          <label>
+            Estado operativo
+            <select
+              name="operationalStatus"
+              defaultValue={
+                value && 'operationalStatus' in value ? value.operationalStatus : 'unknown'
+              }
+            >
+              <option value="operational">Operativo</option>
+              <option value="limited">Operación limitada</option>
+              <option value="out_of_service">Fuera de servicio</option>
+              <option value="unknown">Sin confirmar</option>
+            </select>
+          </label>
+          <label className="field-wide">
+            Diagnóstico más reciente
+            <textarea
+              name="latestDiagnosis"
+              maxLength={2000}
+              defaultValue={value && 'latestDiagnosis' in value ? value.latestDiagnosis : ''}
+            />
+          </label>
         </>
       )}
       <label>
@@ -453,6 +629,7 @@ function value(form: FormData, key: string): string {
 
 function parseForm(kind: EntityKind, form: FormData): ClientInput | SiteInput | EquipmentInput {
   if (kind === 'clients') {
+    const billingStreet = value(form, 'billingStreet');
     return clientInputSchema.parse({
       name: value(form, 'name'),
       legalName: value(form, 'legalName'),
@@ -462,6 +639,20 @@ function parseForm(kind: EntityKind, form: FormData): ClientInput | SiteInput | 
       phone: value(form, 'phone'),
       status: value(form, 'status'),
       notes: value(form, 'notes'),
+      ...(billingStreet
+        ? {
+            billingAddress: {
+              street: billingStreet,
+              exteriorNumber: value(form, 'billingExteriorNumber'),
+              interiorNumber: value(form, 'billingInteriorNumber'),
+              neighborhood: value(form, 'billingNeighborhood'),
+              city: value(form, 'billingCity'),
+              state: value(form, 'billingState'),
+              postalCode: value(form, 'billingPostalCode'),
+              country: 'México',
+            },
+          }
+        : {}),
     });
   }
   if (kind === 'sites') {
@@ -479,6 +670,10 @@ function parseForm(kind: EntityKind, form: FormData): ClientInput | SiteInput | 
       },
       contactName: value(form, 'contactName'),
       contactPhone: value(form, 'contactPhone'),
+      accessSchedule: value(form, 'accessSchedule'),
+      accessInstructions: value(form, 'accessInstructions'),
+      latitude: numberOrNull(form, 'latitude'),
+      longitude: numberOrNull(form, 'longitude'),
       status: value(form, 'status'),
     });
   }
@@ -493,6 +688,14 @@ function parseForm(kind: EntityKind, form: FormData): ClientInput | SiteInput | 
     capacity: value(form, 'capacity'),
     refrigerant: value(form, 'refrigerant'),
     technicalNotes: value(form, 'technicalNotes'),
+    locationReference: value(form, 'locationReference'),
+    operationalStatus: value(form, 'operationalStatus'),
+    latestDiagnosis: value(form, 'latestDiagnosis'),
     status: value(form, 'status'),
   });
+}
+
+function numberOrNull(form: FormData, key: string): number | null {
+  const raw = value(form, key);
+  return raw === '' ? null : Number(raw);
 }

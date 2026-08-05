@@ -27,7 +27,11 @@ export type DomainCollection =
   | 'catalogs'
   | 'catalogItems'
   | 'settings'
-  | 'notifications';
+  | 'notifications'
+  | 'supportRequests'
+  | 'siteFiles'
+  | 'equipmentFiles'
+  | 'equipmentInterventions';
 
 export async function listDocuments<T>(
   collectionName: DomainCollection | 'users' | 'notifications' | 'auditLogs' | 'documents',
@@ -137,11 +141,13 @@ export const constraints = {
   newest: () => orderBy('createdAt', 'desc'),
   byClient: (clientId: string) => where('clientId', '==', clientId),
   bySite: (siteId: string) => where('siteId', '==', siteId),
+  byEquipment: (equipmentId: string) => where('equipmentId', '==', equipmentId),
   assignedTo: (uid: string) => where('assignedTo', '==', uid),
   authorizedFor: (uid: string) => where('operatorIds', 'array-contains', uid),
   notificationsFor: (uid: string) => where('userId', '==', uid),
   auditFor: (uid: string) => where('actorId', '==', uid),
   activeOnly: () => where('status', '==', 'active'),
+  createdBy: (uid: string) => where('createdBy', '==', uid),
 };
 
 export async function callFunction<TInput, TOutput>(name: string, data: TInput): Promise<TOutput> {

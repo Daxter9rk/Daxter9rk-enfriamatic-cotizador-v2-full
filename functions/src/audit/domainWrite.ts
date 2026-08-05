@@ -7,6 +7,10 @@ const AUDITED_COLLECTIONS = new Set([
   'clients',
   'sites',
   'equipment',
+  'equipmentInterventions',
+  'siteFiles',
+  'equipmentFiles',
+  'supportRequests',
   'requests',
   'quotes',
   'catalogs',
@@ -24,6 +28,11 @@ const SAFE_FIELDS = [
   'documentStatus',
   'locked',
   'grandTotal',
+  'interventionType',
+  'resultingStatus',
+  'subject',
+  'finalNote',
+  'reopenReason',
   'updatedBy',
 ];
 
