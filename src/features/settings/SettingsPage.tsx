@@ -3,7 +3,7 @@ import {useAuth} from '../../app/providers/AuthProvider';
 import {PageHeader} from '../../components/PageHeader';
 import {ReauthenticationModal} from '../../components/ReauthenticationModal';
 import {StatePanel} from '../../components/StatePanel';
-import {getDocument, setKnownDocument} from '../../services/firebase/data';
+import {getDocument, setKnownDocumentsAtomically} from '../../services/firebase/data';
 
 interface CompanyProfile {
   companyName: string;
@@ -102,10 +102,13 @@ export function SettingsPage() {
     setBusy(true);
     setMessage(null);
     try {
-      await Promise.all([
-        setKnownDocument('settings', 'companyProfile', company, profile.uid),
-        setKnownDocument('settings', 'quoteDefaults', defaults, profile.uid),
-      ]);
+      await setKnownDocumentsAtomically(
+        [
+          {collectionName: 'settings', id: 'companyProfile', data: company},
+          {collectionName: 'settings', id: 'quoteDefaults', data: defaults},
+        ],
+        profile.uid,
+      );
       setSnapshot({company, defaults});
       setEditing(false);
       setConfirming(false);
