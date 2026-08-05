@@ -18,6 +18,21 @@ const MasterDataPage = lazy(() =>
     default: module.MasterDataPage,
   })),
 );
+const ClientDetailPage = lazy(() =>
+  import('../features/master-data/EntityDetailPages').then((module) => ({
+    default: module.ClientDetailPage,
+  })),
+);
+const SiteDetailPage = lazy(() =>
+  import('../features/master-data/EntityDetailPages').then((module) => ({
+    default: module.SiteDetailPage,
+  })),
+);
+const EquipmentDetailPage = lazy(() =>
+  import('../features/master-data/EntityDetailPages').then((module) => ({
+    default: module.EquipmentDetailPage,
+  })),
+);
 const RequestsPage = lazy(() =>
   import('../features/requests/RequestsPage').then((module) => ({default: module.RequestsPage})),
 );
@@ -40,6 +55,9 @@ const SettingsPage = lazy(() =>
 );
 const ManualPage = lazy(() =>
   import('../features/manual/ManualPage').then((module) => ({default: module.ManualPage})),
+);
+const SupportPage = lazy(() =>
+  import('../features/support/SupportPage').then((module) => ({default: module.SupportPage})),
 );
 
 export function App() {
@@ -70,11 +88,20 @@ export function App() {
       <AppShell>
         <Switch>
           <Route path="/" component={DashboardPage} />
+          <Route path="/clients/:clientId">
+            {(params) => <ClientDetailPage clientId={params.clientId} />}
+          </Route>
           <Route path="/clients">
             <MasterDataPage kind="clients" />
           </Route>
+          <Route path="/sites/:siteId">
+            {(params) => <SiteDetailPage siteId={params.siteId} />}
+          </Route>
           <Route path="/sites">
             <MasterDataPage kind="sites" />
+          </Route>
+          <Route path="/equipment/:equipmentId">
+            {(params) => <EquipmentDetailPage equipmentId={params.equipmentId} />}
           </Route>
           <Route path="/equipment">
             <MasterDataPage kind="equipment" />
@@ -85,6 +112,7 @@ export function App() {
           <Route path="/commercial-catalog" component={CommercialCatalogPage} />
           <Route path="/activity" component={ActivityPage} />
           <Route path="/manual" component={ManualPage} />
+          <Route path="/support" component={SupportPage} />
           <Route path="/users">
             {profile?.role === 'admin' ? <UsersPage /> : <Redirect to="/" replace />}
           </Route>

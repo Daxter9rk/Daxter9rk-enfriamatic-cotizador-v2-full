@@ -2,44 +2,46 @@ import {useState, type ReactNode} from 'react';
 import {Link, useLocation} from 'wouter';
 import {useAuth} from '../app/providers/AuthProvider';
 import logo from '../assets/brand/enfriamatic-logo-transparent.png';
+import {Icon, type IconName} from '../components/Icon';
+import {NotificationCenter} from '../components/NotificationCenter';
 
-const adminLinks = [
-  ['/', 'Inicio'],
-  ['/users', 'Usuarios'],
-  ['/clients', 'Clientes'],
-  ['/sites', 'Instalaciones'],
-  ['/equipment', 'Equipos'],
-  ['/requests', 'Solicitudes'],
-  ['/quotes', 'Cotizaciones'],
-  ['/commercial-catalog', 'Catálogo comercial'],
-  ['/catalogs', 'Catálogos'],
-  ['/activity', 'Actividad'],
-  ['/settings', 'Configuración'],
-  ['/manual', 'Manual'],
-] as const;
+interface NavigationItem {
+  href: string;
+  label: string;
+  icon: IconName;
+}
 
-const operatorLinks = [
-  ['/', 'Inicio'],
-  ['/requests', 'Mis solicitudes'],
-  ['/clients', 'Clientes'],
-  ['/sites', 'Instalaciones'],
-  ['/equipment', 'Equipos'],
-  ['/quotes', 'Cotizaciones'],
-  ['/commercial-catalog', 'Catálogo comercial'],
-  ['/activity', 'Historial'],
-  ['/manual', 'Manual'],
-] as const;
+const operationalLinks: NavigationItem[] = [
+  {href: '/', label: 'Inicio', icon: 'home'},
+  {href: '/clients', label: 'Clientes', icon: 'client'},
+  {href: '/sites', label: 'Instalaciones', icon: 'site'},
+  {href: '/equipment', label: 'Equipos', icon: 'equipment'},
+  {href: '/requests', label: 'Solicitudes', icon: 'request'},
+  {href: '/quotes', label: 'Cotizaciones', icon: 'quote'},
+  {href: '/commercial-catalog', label: 'Catálogo comercial', icon: 'catalog'},
+  {href: '/activity', label: 'Actividad', icon: 'activity'},
+];
+
+const helpLinks: NavigationItem[] = [
+  {href: '/manual', label: 'Manual', icon: 'manual'},
+  {href: '/support', label: 'Soporte', icon: 'support'},
+];
+
+const adminLinks: NavigationItem[] = [
+  {href: '/settings', label: 'Configuración', icon: 'settings'},
+  {href: '/users', label: 'Usuarios y permisos', icon: 'users'},
+  {href: '/catalogs', label: 'Catálogos internos', icon: 'catalog'},
+];
 
 export function AppShell({children}: {children: ReactNode}) {
   const {profile, logout} = useAuth();
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
-  const links = profile?.role === 'admin' ? adminLinks : operatorLinks;
 
   return (
     <div className="app-shell">
       <header className="mobile-header">
-        <img src={logo} alt="Enfriamatic" />
+        <img src={logo} alt="Enfriamatic Cotizador V2.1" />
         <button
           className="icon-button"
           aria-label="Abrir navegación"
@@ -52,27 +54,34 @@ export function AppShell({children}: {children: ReactNode}) {
       <aside className={`sidebar ${open ? 'sidebar--open' : ''}`}>
         <div className="brand-block">
           <img src={logo} alt="Enfriamatic" />
-          <span>Cotizador V2</span>
+          <span>Cotizador V2.1 · DEV</span>
         </div>
-        <nav aria-label="Navegación principal">
-          {links.map(([href, label]) => (
-            <Link
-              key={href}
-              href={href}
-              onClick={() => setOpen(false)}
-              className={
-                location === href || (href !== '/' && location.startsWith(`${href}/`))
-                  ? 'active'
-                  : undefined
-              }
-            >
-              {label}
-            </Link>
-          ))}
-        </nav>
+        <NavigationGroup
+          label="Operación"
+          items={operationalLinks}
+          location={location}
+          close={() => setOpen(false)}
+        />
+        {profile?.role === 'admin' && (
+          <NavigationGroup
+            label="Administración"
+            items={adminLinks}
+            location={location}
+            close={() => setOpen(false)}
+          />
+        )}
+        <NavigationGroup
+          label="Ayuda"
+          items={helpLinks}
+          location={location}
+          close={() => setOpen(false)}
+        />
         <div className="sidebar__account">
           <strong>{profile?.displayName}</strong>
-          <span>{profile?.role === 'admin' ? 'Administrador' : 'Operador'}</span>
+          <span>
+            {profile?.role === 'admin' ? 'Administrador' : 'Operador'}
+            {profile?.isPrimaryAdmin ? ' principal' : ''}
+          </span>
           <button className="button button--ghost" onClick={() => void logout()}>
             Cerrar sesión
           </button>
@@ -85,7 +94,71 @@ export function AppShell({children}: {children: ReactNode}) {
           onClick={() => setOpen(false)}
         />
       )}
-      <main className="app-main">{children}</main>
+      <main className="app-main">
+        <header className="desktop-topbar">
+          <div>
+            <strong>Enfriamatic</strong>
+            <span>Operación DEV · V2.1</span>
+          </div>
+          <NotificationCenter />
+        </header>
+        <div className="page-content">{children}</div>
+      </main>
+      <nav className="mobile-bottom-nav" aria-label="Accesos móviles">
+        {operationalLinks.slice(0, 5).map((item) => (
+          <NavigationLink
+            key={item.href}
+            item={item}
+            location={location}
+            close={() => undefined}
+            compact
+          />
+        ))}
+      </nav>
     </div>
+  );
+}
+
+function NavigationGroup({
+  label,
+  items,
+  location,
+  close,
+}: {
+  label: string;
+  items: NavigationItem[];
+  location: string;
+  close(): void;
+}) {
+  return (
+    <div className="nav-group">
+      <span>{label}</span>
+      <nav aria-label={label}>
+        {items.map((item) => (
+          <NavigationLink key={item.href} item={item} location={location} close={close} />
+        ))}
+      </nav>
+    </div>
+  );
+}
+
+function NavigationLink({
+  item,
+  location,
+  close,
+  compact = false,
+}: {
+  item: NavigationItem;
+  location: string;
+  close(): void;
+  compact?: boolean;
+}) {
+  const active =
+    location === item.href || (item.href !== '/' && location.startsWith(`${item.href}/`));
+  return (
+    <Link href={item.href} onClick={close} className={active ? 'active' : undefined}>
+      <Icon name={item.icon} />
+      {compact ? <span>{item.label.split(' ')[0]}</span> : item.label}
+    </Link>
   );
 }
