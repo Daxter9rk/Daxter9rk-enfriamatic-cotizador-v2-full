@@ -12,6 +12,7 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
   type DocumentData,
   type QueryConstraint,
 } from 'firebase/firestore';
@@ -75,6 +76,38 @@ export async function updateDocument(
     updatedAt: serverTimestamp(),
     updatedBy: actorId,
   });
+}
+
+export async function deleteDocument(collectionName: DomainCollection, id: string): Promise<void> {
+  await deleteDoc(doc(db, collectionName, id));
+}
+
+export function reserveDocumentId(collectionName: DomainCollection): string {
+  return doc(collection(db, collectionName)).id;
+}
+
+export async function setKnownDocumentsAtomically(
+  writes: Array<{collectionName: DomainCollection; id: string; data: DocumentData}>,
+  actorId: string,
+): Promise<void> {
+  const references = writes.map((write) => doc(db, write.collectionName, write.id));
+  const existing = await Promise.all(references.map((reference) => getDoc(reference)));
+  const batch = writeBatch(db);
+  writes.forEach((write, index) => {
+    batch.set(
+      references[index]!,
+      {
+        ...write.data,
+        ...(existing[index]!.exists()
+          ? {}
+          : {createdAt: serverTimestamp(), createdBy: actorId, schemaVersion: 1}),
+        updatedAt: serverTimestamp(),
+        updatedBy: actorId,
+      },
+      {merge: true},
+    );
+  });
+  await batch.commit();
 }
 
 export async function markNotificationRead(notificationId: string): Promise<void> {

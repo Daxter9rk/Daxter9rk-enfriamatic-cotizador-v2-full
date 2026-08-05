@@ -42,6 +42,10 @@ beforeEach(async () => {
     const now = Timestamp.now();
     await Promise.all([
       setDoc(doc(context.firestore(), 'users/admin'), {role: 'admin', status: 'active'}),
+      setDoc(doc(context.firestore(), 'users/promoted-admin'), {
+        role: 'admin',
+        status: 'active',
+      }),
       setDoc(doc(context.firestore(), 'users/operator'), {
         role: 'operator',
         status: 'active',
@@ -51,14 +55,41 @@ beforeEach(async () => {
         status: 'active',
       }),
       setDoc(doc(context.firestore(), 'sites/site-1'), {operatorIds: ['operator']}),
+      setDoc(doc(context.firestore(), 'equipment/equipment-1'), {
+        operatorIds: ['operator'],
+      }),
       setDoc(doc(context.firestore(), 'siteFiles/file-1'), {
         siteId: 'site-1',
-        storagePath: 'sites/site-1/file-1/plano.pdf',
+        storagePath: 'sites/site-1/file-1/file-1.pdf',
         mimeType: 'application/pdf',
         sizeBytes: pdfBytes.byteLength,
         status: 'pending',
+        createdBy: 'admin',
+        createdAt: now,
+        isPrimary: false,
+      }),
+      setDoc(doc(context.firestore(), 'equipmentFiles/equipment-file-1'), {
+        equipmentId: 'equipment-1',
+        storagePath: 'equipment/equipment-1/equipment-file-1/equipment-file-1.png',
+        mimeType: 'image/png',
+        sizeBytes: 3,
+        status: 'pending',
         createdBy: 'operator',
         createdAt: now,
+      }),
+      setDoc(doc(context.firestore(), 'catalogItems/CAT-1'), {
+        status: 'active',
+        imageStoragePath: 'catalog/CAT-1/catalog-file/catalog-file.png',
+        imageMimeType: 'image/png',
+        imageSizeBytes: 3,
+        imageStatus: 'pending',
+      }),
+      setDoc(doc(context.firestore(), 'supportRequests/support-1'), {
+        createdBy: 'operator',
+        attachmentStoragePath: 'support/support-1/support-file/support-file.png',
+        attachmentMimeType: 'image/png',
+        attachmentSizeBytes: 3,
+        attachmentStatus: 'pending',
       }),
     ]);
   });
@@ -104,23 +135,27 @@ describe('Storage rules — private backend-only documents', () => {
 });
 
 describe('Storage rules — private site files', () => {
-  const path = 'sites/site-1/file-1/plano.pdf';
+  const path = 'sites/site-1/file-1/file-1.pdf';
 
-  it('allows only an assigned active user to upload matching metadata and read a ready file', async () => {
+  it('allows both admin variants to upload and assigned operators only to read a ready file', async () => {
     const operatorStorage = environment.authenticatedContext('operator').storage();
+    const adminStorage = environment.authenticatedContext('admin').storage();
     await assertSucceeds(
-      uploadBytes(ref(operatorStorage, path), pdfBytes, {contentType: 'application/pdf'}),
+      uploadBytes(ref(adminStorage, path), pdfBytes, {contentType: 'application/pdf'}),
     );
     await environment.withSecurityRulesDisabled(async (context) => {
       await updateDoc(doc(context.firestore(), 'siteFiles/file-1'), {status: 'ready'});
     });
     await assertSucceeds(getBytes(ref(operatorStorage, path)));
+    await assertFails(
+      uploadBytes(ref(operatorStorage, path), pdfBytes, {contentType: 'application/pdf'}),
+    );
     await assertFails(getBytes(ref(environment.authenticatedContext('other').storage(), path)));
     await assertFails(getBytes(ref(environment.unauthenticatedContext().storage(), path)));
   });
 
   it('rejects a path, MIME type, size, or uploader that disagrees with metadata', async () => {
-    const operatorStorage = environment.authenticatedContext('operator').storage();
+    const operatorStorage = environment.authenticatedContext('admin').storage();
     await assertFails(
       uploadBytes(ref(operatorStorage, path), pdfBytes, {contentType: 'image/png'}),
     );
@@ -139,5 +174,70 @@ describe('Storage rules — private site files', () => {
         contentType: 'application/pdf',
       }),
     );
+  });
+
+  it('lets an admin delete a non-primary object while an operator cannot', async () => {
+    const creatorStorage = environment.authenticatedContext('admin').storage();
+    const promotedAdminStorage = environment.authenticatedContext('promoted-admin').storage();
+    await assertSucceeds(
+      uploadBytes(ref(creatorStorage, path), pdfBytes, {contentType: 'application/pdf'}),
+    );
+    await assertFails(
+      deleteObject(ref(environment.authenticatedContext('operator').storage(), path)),
+    );
+    await assertSucceeds(deleteObject(ref(promotedAdminStorage, path)));
+  });
+});
+
+describe('Storage rules — equipment, catalog, and support', () => {
+  const image = new Uint8Array([1, 2, 3]);
+
+  it('allows an assigned operator to manage its equipment object but denies an unrelated operator', async () => {
+    const path = 'equipment/equipment-1/equipment-file-1/equipment-file-1.png';
+    const operatorStorage = environment.authenticatedContext('operator').storage();
+    await assertSucceeds(
+      uploadBytes(ref(operatorStorage, path), image, {contentType: 'image/png'}),
+    );
+    await assertSucceeds(deleteObject(ref(operatorStorage, path)));
+    await assertFails(
+      uploadBytes(ref(environment.authenticatedContext('other').storage(), path), image, {
+        contentType: 'image/png',
+      }),
+    );
+  });
+
+  it('restricts catalog images to admins and rejects SVG', async () => {
+    const path = 'catalog/CAT-1/catalog-file/catalog-file.png';
+    await assertSucceeds(
+      uploadBytes(ref(environment.authenticatedContext('promoted-admin').storage(), path), image, {
+        contentType: 'image/png',
+      }),
+    );
+    await assertFails(
+      uploadBytes(ref(environment.authenticatedContext('operator').storage(), path), image, {
+        contentType: 'image/png',
+      }),
+    );
+    await assertFails(
+      uploadBytes(ref(environment.authenticatedContext('admin').storage(), path), image, {
+        contentType: 'image/svg+xml',
+      }),
+    );
+  });
+
+  it('keeps support captures private to the reporter and admins', async () => {
+    const path = 'support/support-1/support-file/support-file.png';
+    const operatorStorage = environment.authenticatedContext('operator').storage();
+    await assertSucceeds(
+      uploadBytes(ref(operatorStorage, path), image, {contentType: 'image/png'}),
+    );
+    await environment.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'supportRequests/support-1'), {
+        attachmentStatus: 'ready',
+      });
+    });
+    await assertSucceeds(getBytes(ref(operatorStorage, path)));
+    await assertSucceeds(getBytes(ref(environment.authenticatedContext('admin').storage(), path)));
+    await assertFails(getBytes(ref(environment.authenticatedContext('other').storage(), path)));
   });
 });

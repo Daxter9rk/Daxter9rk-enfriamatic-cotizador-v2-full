@@ -53,6 +53,7 @@ service firebase.storage {
         && metadata().siteId == siteId
         && metadata().storagePath == 'sites/' + siteId + '/' + fileId + '/' + fileName;
       allow create: if isActiveUser()
+        && profile().role == 'admin'
         && canReadMaster(
           firestore.get(/databases/(default)/documents/sites/$(siteId)).data
         )
@@ -63,7 +64,14 @@ service firebase.storage {
         && metadata().storagePath == 'sites/' + siteId + '/' + fileId + '/' + fileName
         && metadata().mimeType == request.resource.contentType
         && metadata().sizeBytes == request.resource.size;
-      allow update, delete: if false;
+      allow delete: if isActiveUser()
+        && profile().role == 'admin'
+        && canReadMaster(
+          firestore.get(/databases/(default)/documents/sites/$(siteId)).data
+        )
+        && metadata().isPrimary == false
+        && metadata().storagePath == 'sites/' + siteId + '/' + fileId + '/' + fileName;
+      allow update: if false;
     }
 
     match /equipment/{equipmentId}/{fileId}/{fileName} {
@@ -94,10 +102,18 @@ service firebase.storage {
         && metadata().storagePath == 'equipment/' + equipmentId + '/' + fileId + '/' + fileName
         && metadata().mimeType == request.resource.contentType
         && metadata().sizeBytes == request.resource.size;
-      allow update, delete: if false;
+      allow delete: if isActiveUser()
+        && canReadMaster(
+          firestore.get(
+            /databases/(default)/documents/equipment/$(equipmentId)
+          ).data
+        )
+        && (profile().role == 'admin' || metadata().createdBy == request.auth.uid)
+        && metadata().storagePath == 'equipment/' + equipmentId + '/' + fileId + '/' + fileName;
+      allow update: if false;
     }
 
-    match /catalog/{code}/{fileName} {
+    match /catalog/{code}/{fileId}/{fileName} {
       function item() {
         return firestore.get(
           /databases/(default)/documents/catalogItems/$(code)
@@ -107,17 +123,47 @@ service firebase.storage {
       allow read: if isActiveUser()
         && (profile().role == 'admin' || item().status == 'active')
         && item().imageStatus == 'ready'
-        && item().imageStoragePath == 'catalog/' + code + '/' + fileName;
+        && item().imageStoragePath == 'catalog/' + code + '/' + fileId + '/' + fileName;
       allow create: if isActiveUser()
         && profile().role == 'admin'
         && request.resource.size > 0
         && request.resource.size <= 5 * 1024 * 1024
         && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp']
         && item().imageStatus == 'pending'
-        && item().imageStoragePath == 'catalog/' + code + '/' + fileName
+        && item().imageStoragePath == 'catalog/' + code + '/' + fileId + '/' + fileName
         && item().imageMimeType == request.resource.contentType
         && item().imageSizeBytes == request.resource.size;
-      allow update, delete: if false;
+      allow delete: if isActiveUser() && profile().role == 'admin';
+      allow update: if false;
+    }
+
+    match /support/{supportId}/{fileId}/{fileName} {
+      function report() {
+        return firestore.get(
+          /databases/(default)/documents/supportRequests/$(supportId)
+        ).data;
+      }
+
+      allow read: if isActiveUser()
+        && (profile().role == 'admin' || report().createdBy == request.auth.uid)
+        && report().attachmentStatus == 'ready'
+        && report().attachmentStoragePath
+          == 'support/' + supportId + '/' + fileId + '/' + fileName;
+      allow create: if isActiveUser()
+        && report().createdBy == request.auth.uid
+        && request.resource.size > 0
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp']
+        && report().attachmentStatus == 'pending'
+        && report().attachmentStoragePath
+          == 'support/' + supportId + '/' + fileId + '/' + fileName
+        && report().attachmentMimeType == request.resource.contentType
+        && report().attachmentSizeBytes == request.resource.size;
+      allow delete: if isActiveUser()
+        && (profile().role == 'admin' || report().createdBy == request.auth.uid)
+        && report().attachmentStoragePath
+          == 'support/' + supportId + '/' + fileId + '/' + fileName;
+      allow update: if false;
     }
 
     match /{allPaths=**} {

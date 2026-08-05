@@ -1,7 +1,8 @@
 import {useEffect, useMemo, useState, type FormEvent} from 'react';
-import {getBlob, ref, uploadBytes} from 'firebase/storage';
+import {deleteObject, getBlob, ref, uploadBytes} from 'firebase/storage';
 import {useAuth} from '../../app/providers/AuthProvider';
 import {Icon} from '../../components/Icon';
+import {FilterBar} from '../../components/FilterBar';
 import {Modal} from '../../components/Modal';
 import {PageHeader} from '../../components/PageHeader';
 import {StatePanel} from '../../components/StatePanel';
@@ -12,6 +13,14 @@ import {constraints, setKnownDocument, updateDocument} from '../../services/fire
 import {storage} from '../../services/firebase/config';
 import {buildSearchTokens, matchesCatalogSearch, normalizeCatalogCode} from '../../utils/catalog';
 import {formatCurrency} from '../../utils/format';
+import {
+  buildPrivateStoragePath,
+  normalizeFirebaseErrorCode,
+  reportFileDiagnostic,
+  runCompensatedUpload,
+  sanitizeVisibleFileName,
+  validatePrivateFile,
+} from '../../utils/privateFiles';
 
 export function CommercialCatalogPage() {
   const {profile} = useAuth();
@@ -24,6 +33,7 @@ export function CommercialCatalogPage() {
   const [type, setType] = useState('all');
   const [category, setCategory] = useState('all');
   const [status, setStatus] = useState('all');
+  const [sort, setSort] = useState('az');
   const [editing, setEditing] = useState<CatalogItem | 'new' | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -34,14 +44,21 @@ export function CommercialCatalogPage() {
   );
   const visible = useMemo(
     () =>
-      catalog.data.filter(
-        (item) =>
-          (type === 'all' || item.type === type) &&
-          (category === 'all' || item.category === category) &&
-          (status === 'all' || item.status === status) &&
-          matchesCatalogSearch(item, search),
-      ),
-    [catalog.data, category, search, status, type],
+      catalog.data
+        .filter(
+          (item) =>
+            (type === 'all' || item.type === type) &&
+            (category === 'all' || item.category === category) &&
+            (status === 'all' || item.status === status) &&
+            matchesCatalogSearch(item, search),
+        )
+        .sort((left, right) => {
+          if (sort === 'za') return right.name.localeCompare(left.name, 'es-MX');
+          if (sort === 'price-desc') return right.basePrice - left.basePrice;
+          if (sort === 'price-asc') return left.basePrice - right.basePrice;
+          return left.name.localeCompare(right.name, 'es-MX');
+        }),
+    [catalog.data, category, search, sort, status, type],
   );
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -52,6 +69,7 @@ export function CommercialCatalogPage() {
     try {
       const form = new FormData(event.currentTarget);
       const image = form.get('image');
+      if (image instanceof File && image.size > 0) validatePrivateFile(image, 'catalog');
       const code = normalizeCatalogCode(String(form.get('code')));
       const parsed = catalogItemInputSchema.parse({
         code,
@@ -83,41 +101,89 @@ export function CommercialCatalogPage() {
         if (editing.code !== code) throw new Error('El código no se puede modificar.');
         await updateDocument('catalogItems', editing.id, parsed, profile.uid);
       }
-      if (image instanceof File && image.size > 0) {
-        if (!['image/jpeg', 'image/png', 'image/webp'].includes(image.type)) {
-          throw new Error('La imagen debe ser JPG, PNG o WebP.');
-        }
-        if (image.size > 5 * 1024 * 1024) throw new Error('La imagen no puede superar 5 MB.');
-        const extension =
-          image.name
-            .split('.')
-            .pop()
-            ?.toLowerCase()
-            .replace(/[^a-z0-9]/g, '') || 'img';
-        const storagePath = `catalog/${code}/imagen-${Date.now()}.${extension}`;
+      if (editing !== 'new' && form.get('removeImage') === 'on' && editing.imageStoragePath) {
+        await deleteObject(ref(storage, editing.imageStoragePath));
         await updateDocument(
           'catalogItems',
           code,
           {
-            imageStoragePath: storagePath,
-            imageFileName: image.name.slice(0, 160),
-            imageMimeType: image.type,
-            imageSizeBytes: image.size,
-            imageStatus: 'pending',
+            imageStoragePath: null,
+            imageFileName: null,
+            imageMimeType: null,
+            imageSizeBytes: null,
+            imageStatus: null,
           },
           profile.uid,
         );
-        try {
-          await uploadBytes(ref(storage, storagePath), image, {contentType: image.type});
-          await updateDocument('catalogItems', code, {imageStatus: 'ready'}, profile.uid);
-        } catch (error) {
-          await updateDocument('catalogItems', code, {imageStatus: 'failed'}, profile.uid);
-          throw error;
-        }
+      }
+      if (image instanceof File && image.size > 0) {
+        const fileId = crypto.randomUUID();
+        const storagePath = buildPrivateStoragePath('catalog', code, fileId, image.type);
+        const previous =
+          editing === 'new'
+            ? null
+            : {
+                imageStoragePath: editing.imageStoragePath ?? null,
+                imageFileName: editing.imageFileName ?? null,
+                imageMimeType: editing.imageMimeType ?? null,
+                imageSizeBytes: editing.imageSizeBytes ?? null,
+                imageStatus: editing.imageStatus ?? null,
+              };
+        await runCompensatedUpload({
+          resourceType: 'catalog',
+          resourceId: code,
+          createMetadata: () =>
+            updateDocument(
+              'catalogItems',
+              code,
+              {
+                imageStoragePath: storagePath,
+                imageFileName: sanitizeVisibleFileName(image.name),
+                imageMimeType: image.type,
+                imageSizeBytes: image.size,
+                imageStatus: 'pending',
+              },
+              profile.uid,
+            ),
+          uploadStorage: () =>
+            uploadBytes(ref(storage, storagePath), image, {
+              contentType: image.type,
+              customMetadata: {resourceType: 'catalog', resourceId: code, fileId},
+            }).then(() => undefined),
+          finalizeLink: async () => {
+            await updateDocument('catalogItems', code, {imageStatus: 'ready'}, profile.uid);
+            if (previous?.imageStoragePath && previous.imageStoragePath !== storagePath) {
+              await deleteObject(ref(storage, previous.imageStoragePath));
+            }
+          },
+          cleanupStorage: () => deleteObject(ref(storage, storagePath)),
+          cleanupMetadata: () =>
+            updateDocument(
+              'catalogItems',
+              code,
+              previous ?? {
+                imageStoragePath: null,
+                imageFileName: null,
+                imageMimeType: null,
+                imageSizeBytes: null,
+                imageStatus: null,
+              },
+              profile.uid,
+            ),
+        });
       }
       setEditing(null);
       await catalog.reload();
     } catch (error) {
+      if (imageForDiagnostic(error)) {
+        reportFileDiagnostic({
+          stage: 'validation',
+          service: 'client',
+          errorCode: normalizeFirebaseErrorCode(error),
+          resourceType: 'catalog',
+          resourceId: editing === 'new' ? 'new-item' : (editing?.id ?? 'unknown'),
+        });
+      }
       setMessage(error instanceof Error ? error.message : 'No fue posible guardar el artículo.');
     } finally {
       setBusy(false);
@@ -156,16 +222,27 @@ export function CommercialCatalogPage() {
           ) : null
         }
       />
-      <section className="catalog-toolbar" aria-label="Filtros del catálogo">
-        <label className="search-field">
-          <span className="sr-only">Buscar</span>
-          <input
-            type="search"
-            placeholder="Buscar por código, nombre, marca o modelo…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </label>
+      <FilterBar
+        label="Filtros del catálogo"
+        search={search}
+        searchPlaceholder="Código, nombre, marca o modelo…"
+        sort={sort}
+        sortOptions={[
+          {value: 'az', label: 'A–Z'},
+          {value: 'za', label: 'Z–A'},
+          {value: 'price-desc', label: 'Mayor precio'},
+          {value: 'price-asc', label: 'Menor precio'},
+        ]}
+        onSearch={setSearch}
+        onSort={setSort}
+        onClear={() => {
+          setSearch('');
+          setType('all');
+          setCategory('all');
+          setStatus('all');
+          setSort('az');
+        }}
+      >
         <select aria-label="Tipo" value={type} onChange={(event) => setType(event.target.value)}>
           <option value="all">Productos y servicios</option>
           <option value="product">Productos</option>
@@ -192,7 +269,7 @@ export function CommercialCatalogPage() {
             <option value="inactive">Inactivos</option>
           </select>
         )}
-      </section>
+      </FilterBar>
       {catalog.error ? (
         <StatePanel kind="error" title="No fue posible cargar el catálogo">
           <button className="button button--secondary" onClick={() => void catalog.reload()}>
@@ -366,6 +443,11 @@ function CatalogEditor({
           <input name="image" type="file" accept="image/jpeg,image/png,image/webp" />
           {current?.imageFileName && <small>Actual: {current.imageFileName}</small>}
         </label>
+        {current?.imageStoragePath && (
+          <label className="checkbox field-wide">
+            <input name="removeImage" type="checkbox" /> Eliminar la imagen actual
+          </label>
+        )}
         {message && <p className="form-message form-message--error field-wide">{message}</p>}
         <button className="button button--primary field-wide" disabled={busy}>
           {busy ? 'Guardando…' : 'Guardar artículo'}
@@ -405,4 +487,8 @@ function CatalogImage({item}: {item: CatalogItem}) {
       )}
     </div>
   );
+}
+
+function imageForDiagnostic(error: unknown): boolean {
+  return error instanceof Error && /formato|extensión|archivo|imagen|\bMB\b/i.test(error.message);
 }

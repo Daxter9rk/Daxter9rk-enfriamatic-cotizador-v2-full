@@ -1,13 +1,26 @@
 import {useMemo, useState, type FormEvent} from 'react';
-import {getBlob, ref, uploadBytes} from 'firebase/storage';
+import {deleteObject, getBlob, ref, uploadBytes} from 'firebase/storage';
 import {useAuth} from '../../app/providers/AuthProvider';
 import {Icon} from '../../components/Icon';
 import {Modal} from '../../components/Modal';
 import {useCollection} from '../../hooks/useCollection';
 import type {EquipmentFile, SiteFile} from '../../models/domain';
-import {constraints, setKnownDocument, updateDocument} from '../../services/firebase/data';
+import {
+  constraints,
+  deleteDocument,
+  setKnownDocument,
+  updateDocument,
+} from '../../services/firebase/data';
 import {storage} from '../../services/firebase/config';
 import {formatDate} from '../../utils/format';
+import {
+  buildPrivateStoragePath,
+  normalizeFirebaseErrorCode,
+  reportFileDiagnostic,
+  runCompensatedUpload,
+  sanitizeVisibleFileName,
+  validatePrivateFile,
+} from '../../utils/privateFiles';
 
 type ManagedFile = SiteFile | EquipmentFile;
 
@@ -37,47 +50,88 @@ export function FileManager({
     const form = new FormData(event.currentTarget);
     const file = form.get('file');
     if (!(file instanceof File) || file.size === 0) return setMessage('Selecciona un archivo.');
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-    if (!allowed.includes(file.type))
-      return setMessage('Formato no permitido. Usa JPG, PNG, WebP o PDF.');
-    if (file.size > 10 * 1024 * 1024) return setMessage('El archivo supera el límite de 10 MB.');
+    try {
+      validatePrivateFile(file, entityType);
+    } catch (error) {
+      reportFileDiagnostic({
+        stage: 'validation',
+        service: 'client',
+        errorCode: 'invalid-file',
+        resourceType: entityType,
+        resourceId: entityId,
+      });
+      return setMessage(error instanceof Error ? error.message : 'El archivo no es válido.');
+    }
     setUploading(true);
     setMessage(null);
     const fileId = crypto.randomUUID();
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-120);
-    const storagePath = `${entityType === 'site' ? 'sites' : 'equipment'}/${entityId}/${fileId}/${safeName}`;
+    const storagePath = buildPrivateStoragePath(entityType, entityId, fileId, file.type);
     const type = String(form.get('type'));
     try {
-      await setKnownDocument(
-        collectionName,
-        fileId,
-        {
-          [idField]: entityId,
-          type,
-          storagePath,
-          fileName: file.name.slice(0, 160),
-          mimeType: file.type,
-          sizeBytes: file.size,
-          description: String(form.get('description') ?? '').trim(),
-          ...(entityType === 'site' ? {isPrimary: false} : {}),
-          status: 'pending',
-        },
-        profile.uid,
-      );
-      await uploadBytes(ref(storage, storagePath), file, {
-        contentType: file.type,
-        customMetadata: {fileId, entityId},
+      await runCompensatedUpload({
+        resourceType: entityType,
+        resourceId: entityId,
+        createMetadata: () =>
+          setKnownDocument(
+            collectionName,
+            fileId,
+            {
+              [idField]: entityId,
+              type,
+              storagePath,
+              fileName: sanitizeVisibleFileName(file.name),
+              mimeType: file.type,
+              sizeBytes: file.size,
+              description: String(form.get('description') ?? '').trim(),
+              ...(entityType === 'site' ? {isPrimary: false} : {}),
+              status: 'pending',
+            },
+            profile.uid,
+          ),
+        uploadStorage: () =>
+          uploadBytes(ref(storage, storagePath), file, {
+            contentType: file.type,
+            customMetadata: {fileId, entityId, resourceType: entityType},
+          }).then(() => undefined),
+        finalizeLink: () => updateDocument(collectionName, fileId, {status: 'ready'}, profile.uid),
+        cleanupStorage: () => deleteObject(ref(storage, storagePath)),
+        cleanupMetadata: () => deleteDocument(collectionName, fileId),
       });
-      await updateDocument(collectionName, fileId, {status: 'ready'}, profile.uid);
       setUploadOpen(false);
       await files.reload();
     } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : 'No fue posible subir el archivo. Verifica tus permisos e inténtalo de nuevo.',
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeFile = async (file: ManagedFile) => {
+    if (!profile || ('isPrimary' in file && file.isPrimary)) return;
+    setUploading(true);
+    setMessage(null);
+    try {
+      await deleteObject(ref(storage, file.storagePath));
       try {
-        await updateDocument(collectionName, fileId, {status: 'failed'}, profile.uid);
-      } catch {
-        /* metadata may not exist */
+        await deleteDocument(collectionName, file.id);
+      } catch (error) {
+        await updateDocument(collectionName, file.id, {status: 'failed'}, profile.uid);
+        throw error;
       }
-      setMessage(error instanceof Error ? error.message : 'No fue posible subir el archivo.');
+      await files.reload();
+    } catch (error) {
+      reportFileDiagnostic({
+        stage: 'cleanup',
+        service: 'storage',
+        errorCode: normalizeFirebaseErrorCode(error),
+        resourceType: entityType,
+        resourceId: entityId,
+      });
+      setMessage('No fue posible eliminar el archivo de forma consistente. Inténtalo de nuevo.');
     } finally {
       setUploading(false);
     }
@@ -180,6 +234,20 @@ export function FileManager({
                       Marcar principal
                     </button>
                   )}
+                {(profile?.role === 'admin' || file.createdBy === profile?.uid) && (
+                  <button
+                    className="text-button text-button--danger"
+                    disabled={uploading || ('isPrimary' in file && file.isPrimary)}
+                    title={
+                      'isPrimary' in file && file.isPrimary
+                        ? 'Cambia primero el archivo principal.'
+                        : undefined
+                    }
+                    onClick={() => void removeFile(file)}
+                  >
+                    Eliminar
+                  </button>
+                )}
               </div>
             </article>
           ))}
