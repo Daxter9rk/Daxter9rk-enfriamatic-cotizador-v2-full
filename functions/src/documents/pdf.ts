@@ -50,10 +50,27 @@ const money = (value: number): string =>
     currency: 'MXN',
   }).format(value);
 
-function ensureSpace(document: PDFKit.PDFDocument, needed: number): void {
+function ensureSpace(document: PDFKit.PDFDocument, needed: number): boolean {
   if (document.y + needed > document.page.height - 90) {
     document.addPage();
+    return true;
   }
+  return false;
+}
+
+function drawTableHeader(document: PDFKit.PDFDocument, y: number): void {
+  document.y = y;
+  document
+    .fillColor('#02557B')
+    .fontSize(8)
+    .text('CANT.', 44, y, {width: 42})
+    .text('UNIDAD', 88, y, {width: 50})
+    .text('DESCRIPCIÓN', 142, y, {width: 245})
+    .text('P. UNITARIO', 390, y, {width: 82, align: 'right'})
+    .text('IMPORTE', 476, y, {width: 92, align: 'right'});
+  document.y = y + 15;
+  document.moveTo(44, document.y).lineTo(568, document.y).stroke('#02557B');
+  document.y += 9;
 }
 
 export async function generateQuotePdf(input: QuotePdfInput): Promise<GeneratedPdf> {
@@ -116,54 +133,62 @@ export async function generateQuotePdf(input: QuotePdfInput): Promise<GeneratedP
       width: 240,
     });
 
-  document.y = 220;
-  document
-    .fillColor('#02557B')
-    .fontSize(8)
-    .text('CANT.', 44, document.y, {width: 42})
-    .text('UNIDAD', 88, document.y, {width: 50})
-    .text('DESCRIPCIÓN', 142, document.y, {width: 245})
-    .text('P. UNITARIO', 390, document.y, {width: 82, align: 'right'})
-    .text('IMPORTE', 476, document.y, {width: 92, align: 'right'});
-  document.moveDown(0.6);
-  document.moveTo(44, document.y).lineTo(568, document.y).stroke('#02557B');
-  document.moveDown(0.6);
+  drawTableHeader(document, 220);
+  let tableY = document.y;
 
   for (const item of input.items) {
-    ensureSpace(document, 58);
-    const startY = document.y;
     const descriptor = [item.description, [item.brand, item.model].filter(Boolean).join(' ')]
       .filter(Boolean)
       .join('\n');
+    document.fontSize(8.5);
+    const descriptorHeight = document.heightOfString(descriptor, {width: 245});
+    const discountHeight =
+      input.discountDisplayMode === 'detailed' && item.discountAmount > 0 ? 13 : 0;
+    const rowHeight = Math.max(40, descriptorHeight + discountHeight + 20);
+    if (tableY + rowHeight + 30 > document.page.height - 90) {
+      document.addPage();
+      document
+        .fillColor('#647680')
+        .fontSize(8)
+        .text(`Cotización ${input.folio} · Continuación`, 44, 44, {width: 524});
+      drawTableHeader(document, 66);
+      tableY = document.y;
+    }
+    const startY = tableY;
     document
       .fillColor('#17242B')
       .fontSize(8.5)
-      .text(String(item.quantity), 44, startY, {width: 42})
-      .text(item.unit, 88, startY, {width: 50})
-      .text(descriptor, 142, startY, {width: 245})
-      .text(
-        money(
-          input.discountDisplayMode === 'incorporated'
-            ? item.lineSubtotal / item.quantity
-            : item.originalUnitPrice,
-        ),
-        390,
-        startY,
-        {width: 82, align: 'right'},
-      )
-      .text(money(item.lineSubtotal), 476, startY, {
-        width: 92,
-        align: 'right',
-      });
+      .text(String(item.quantity), 44, startY, {width: 42, height: rowHeight});
+    document.text(item.unit, 88, startY, {width: 50, height: rowHeight});
+    document.text(descriptor, 142, startY, {width: 245, height: descriptorHeight + 2});
+    document.text(
+      money(
+        input.discountDisplayMode === 'incorporated'
+          ? item.lineSubtotal / item.quantity
+          : item.originalUnitPrice,
+      ),
+      390,
+      startY,
+      {width: 82, height: rowHeight, align: 'right'},
+    );
+    document.text(money(item.lineSubtotal), 476, startY, {
+      width: 92,
+      height: rowHeight,
+      align: 'right',
+    });
     if (input.discountDisplayMode === 'detailed' && item.discountAmount > 0) {
       document
         .fillColor('#CB171D')
         .fontSize(7.5)
-        .text(`Descuento: -${money(item.discountAmount)}`, 142, document.y + 2);
+        .text(`Descuento: -${money(item.discountAmount)}`, 142, startY + descriptorHeight + 2, {
+          width: 245,
+        });
     }
-    document.y = Math.max(document.y + 8, startY + 34);
+    tableY = startY + rowHeight;
+    document.y = tableY;
     document.moveTo(44, document.y).lineTo(568, document.y).stroke('#E7EDF0');
-    document.moveDown(0.5);
+    tableY += 6;
+    document.y = tableY;
   }
 
   ensureSpace(document, 150);

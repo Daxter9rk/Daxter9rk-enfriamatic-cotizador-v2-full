@@ -26,6 +26,8 @@
     "seed:emulators": "tsx scripts/seed-emulators.ts",
     "seed:emulators:functional": "tsx scripts/seed-emulator-functional.ts",
     "evidence:emulators": "tsx scripts/capture-emulator-evidence.ts",
+    "manuals:generate": "python scripts/generate_manual_pdfs.py",
+    "evidence:pdf": "npm --prefix functions run build && node scripts/generate-pdf-evidence.mjs",
     "preflight:dev": "tsx scripts/preflight-dev.ts",
     "inventory:dev": "tsx scripts/inventory-dev.ts",
     "seed:dev": "tsx scripts/seed-dev.ts",
