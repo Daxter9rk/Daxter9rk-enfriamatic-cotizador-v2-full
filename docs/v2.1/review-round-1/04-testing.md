@@ -22,6 +22,7 @@ Antes de cambiar código: `npm run validate` correcto; `npm run validate:emulato
 | Playwright                | 12/12 aprobados dentro del mismo `npm run validate:emulators` final                                    |
 | `npm run audit:all`       | Frontend 0; Functions 7 moderadas transitivas en `uuid`; 0 altas/críticas                              |
 | `git diff --check`        | Correcto                                                                                               |
+| GitHub CI (`92cd1b3`)     | `validate` aprobado en 1m45s; `emulator-tests` aprobado en 3m43s                                       |
 
 La prueba antes intermitente no se cerró con reintento: se identificó una carrera real. El mensaje de éxito podía cerrar el modal antes de completar `onChanged`; una recarga tardía lo reabría. La UI ahora espera la recarga y sólo después confirma/cierra. El flujo aislado y después los 12 E2E completos aprobaron.
 
