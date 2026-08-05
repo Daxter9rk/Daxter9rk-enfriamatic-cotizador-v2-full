@@ -33,3 +33,4 @@ Los manuales de administrador y operador también fueron renderizados e inspecci
 
 - `healthCheck`: HTTP 200 con `environment: dev`.
 - Preview público: carga en español, título correcto, formulario de acceso presente, ancho de documento igual al viewport y consola sin errores/advertencias en la inspección inicial.
+- GitHub CI del PR #7: `validate` aprobado en 1m39s y `emulator-tests` aprobado en 3m30s.

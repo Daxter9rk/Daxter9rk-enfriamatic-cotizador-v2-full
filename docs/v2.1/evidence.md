@@ -6,6 +6,7 @@
 - URL: https://enfriamatic-cotizador-de-420e5--v2-1-operational-redes-tldjx9c8.web.app
 - Expiración: 3 de septiembre de 2026, 22:27:58 (America/Mexico_City).
 - Hosting principal: no desplegado.
+- PR en borrador: https://github.com/Daxter9rk/Daxter9rk-enfriamatic-cotizador-v2-full/pull/7
 
 ## Capturas reproducibles
 

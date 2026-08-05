@@ -2,7 +2,7 @@
 
 ## Veredicto
 
-**LISTO PARA REVISIÓN HUMANA**, sujeto a que el usuario valide el preview y a publicar la rama/PR cuando se renueve la autenticación de GitHub si el push actual no dispone de credenciales válidas.
+**LISTO PARA REVISIÓN HUMANA**, sujeto a que el usuario valide el preview.
 
 ## Estado
 
@@ -13,6 +13,8 @@
 - Hosting: sólo canal preview temporal; `live` sin cambios.
 - Índices: sin cambios ni despliegue.
 - Datos: sin borrados ni migración destructiva.
+- GitHub: rama publicada y PR en borrador #7 abierto contra `main`.
+- CI: `validate` y `emulator-tests` aprobados.
 
 ## Entrega funcional
 
@@ -37,4 +39,3 @@
 ## Decisiones pendientes
 
 - Revisión humana del preview.
-- Renovar autenticación de GitHub sólo si el push/PR no puede realizarse con las credenciales Git existentes.
