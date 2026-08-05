@@ -43,6 +43,26 @@ export const transitionQuoteSchema = z
     }
   });
 
+export const transitionRequestSchema = z
+  .object({
+    requestId: z.string().min(1).max(128),
+    to: z.enum(['in_progress', 'completed', 'cancelled']),
+    reason: z.string().trim().min(5).max(1000).nullable().optional(),
+    finalNote: z.string().trim().max(2000).nullable().optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.to === 'in_progress' && value.reason === null) return;
+    if (value.to === 'cancelled' && !value.reason) {
+      context.addIssue({code: 'custom', path: ['reason'], message: 'A reason is required.'});
+    }
+  });
+
+export const assignRequestSchema = z.object({
+  requestId: z.string().min(1).max(128),
+  assignedTo: z.string().min(1).max(128),
+  note: z.string().trim().max(500).nullable().optional(),
+});
+
 export const quoteItemSchema = z.object({
   position: z.number().int().min(0).max(999),
   quantity: z.number().positive().max(1_000_000),

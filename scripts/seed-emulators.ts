@@ -92,6 +92,8 @@ for (const account of accounts) {
       updatedAt: now,
       updatedBy: 'seed-admin-active',
       lastLoginAt: null,
+      lastActivityAt: account.role === 'operator' && account.status === 'active' ? now : null,
+      isPrimaryAdmin: account.role === 'admin' && account.status === 'active',
       schemaVersion: 1,
     });
   }

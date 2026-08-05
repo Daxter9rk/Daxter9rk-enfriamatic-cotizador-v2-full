@@ -314,6 +314,35 @@ describe('Firestore rules — create, update, delete, and immutable fields', () 
     );
     await assertFails(deleteDoc(reference));
   });
+
+  it('keeps completion, reopening, cancellation, and assignment history backend-owned', async () => {
+    const db = environment.authenticatedContext('admin').firestore();
+    await assertFails(
+      setDoc(doc(db, 'requests/forged-completion'), {
+        ...serviceRequest(null, 'completed'),
+        finalNote: 'Resultado falsificado desde el cliente.',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        createdBy: 'admin',
+        updatedBy: 'admin',
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(db, 'requests/assigned'), {
+        assignmentHistory: [{assignedTo: 'other'}],
+        updatedAt: serverTimestamp(),
+        updatedBy: 'admin',
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(db, 'requests/assigned'), {
+        status: 'cancelled',
+        cancellationReason: 'Mutación directa no autorizada.',
+        updatedAt: serverTimestamp(),
+        updatedBy: 'admin',
+      }),
+    );
+  });
 });
 
 describe('Firestore rules — quotes and line items', () => {
@@ -547,7 +576,10 @@ function equipment(operatorIds: string[]) {
   };
 }
 
-function serviceRequest(assignedTo: string | null, status: 'pending' | 'assigned' | 'in_progress') {
+function serviceRequest(
+  assignedTo: string | null,
+  status: 'pending' | 'assigned' | 'in_progress' | 'completed' | 'cancelled',
+) {
   return {
     clientId: 'authorized',
     siteId: 'site',

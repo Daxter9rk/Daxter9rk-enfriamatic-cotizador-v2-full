@@ -7,6 +7,7 @@ export interface ActiveActor {
   email: string;
   displayName: string;
   role: UserRole;
+  isPrimaryAdmin: boolean;
 }
 
 export async function requireActiveActor(
@@ -36,5 +37,20 @@ export async function requireActiveActor(
     email: String(data.email ?? request.auth?.token.email ?? ''),
     displayName: String(data.displayName ?? ''),
     role: data.role,
+    isPrimaryAdmin: data.isPrimaryAdmin === true,
   };
+}
+
+export function requireRecentAuthentication(
+  request: CallableRequest<unknown>,
+  maximumAge = 300,
+): void {
+  const authenticationTime = request.auth?.token.auth_time;
+  if (typeof authenticationTime !== 'number') {
+    throw new HttpsError('unauthenticated', 'Recent authentication is required.');
+  }
+  const age = Math.floor(Date.now() / 1000) - authenticationTime;
+  if (age < 0 || age > maximumAge) {
+    throw new HttpsError('unauthenticated', 'Recent authentication is required.');
+  }
 }

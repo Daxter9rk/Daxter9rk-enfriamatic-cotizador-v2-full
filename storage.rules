@@ -2,14 +2,101 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Quote PDFs are written and read only by Admin SDK Functions. The frontend
-    // uses the authenticated downloadQuotePdf callable and never receives a
-    // storage path, download token, or permanent URL.
+    function profile() {
+      return firestore.get(
+        /databases/(default)/documents/users/$(request.auth.uid)
+      ).data;
+    }
+
+    function isActiveUser() {
+      return request.auth != null
+        && firestore.exists(
+          /databases/(default)/documents/users/$(request.auth.uid)
+        )
+        && profile().status == 'active'
+        && profile().role in ['admin', 'operator'];
+    }
+
+    function canReadMaster(data) {
+      return isActiveUser()
+        && (
+          profile().role == 'admin'
+          || request.auth.uid in data.operatorIds
+        );
+    }
+
+    function validUpload() {
+      return request.resource.size > 0
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType in [
+          'application/pdf', 'image/jpeg', 'image/png', 'image/webp'
+        ];
+    }
+
+    // Quote documents never expose a permanent Storage URL. Functions perform
+    // authorization and stream short-lived bytes to the authenticated caller.
     match /quotes/{quoteId}/documents/{documentId} {
       allow read, write: if false;
     }
 
-    // Default deny for every other object and path.
+    match /sites/{siteId}/{fileId}/{fileName} {
+      function metadata() {
+        return firestore.get(
+          /databases/(default)/documents/siteFiles/$(fileId)
+        ).data;
+      }
+
+      allow read: if canReadMaster(
+          firestore.get(/databases/(default)/documents/sites/$(siteId)).data
+        )
+        && metadata().status == 'ready'
+        && metadata().siteId == siteId
+        && metadata().storagePath == 'sites/' + siteId + '/' + fileId + '/' + fileName;
+      allow create: if isActiveUser()
+        && canReadMaster(
+          firestore.get(/databases/(default)/documents/sites/$(siteId)).data
+        )
+        && validUpload()
+        && metadata().status == 'pending'
+        && metadata().createdBy == request.auth.uid
+        && metadata().siteId == siteId
+        && metadata().storagePath == 'sites/' + siteId + '/' + fileId + '/' + fileName
+        && metadata().mimeType == request.resource.contentType
+        && metadata().sizeBytes == request.resource.size;
+      allow update, delete: if false;
+    }
+
+    match /equipment/{equipmentId}/{fileId}/{fileName} {
+      function metadata() {
+        return firestore.get(
+          /databases/(default)/documents/equipmentFiles/$(fileId)
+        ).data;
+      }
+
+      allow read: if canReadMaster(
+          firestore.get(
+            /databases/(default)/documents/equipment/$(equipmentId)
+          ).data
+        )
+        && metadata().status == 'ready'
+        && metadata().equipmentId == equipmentId
+        && metadata().storagePath == 'equipment/' + equipmentId + '/' + fileId + '/' + fileName;
+      allow create: if isActiveUser()
+        && canReadMaster(
+          firestore.get(
+            /databases/(default)/documents/equipment/$(equipmentId)
+          ).data
+        )
+        && validUpload()
+        && metadata().status == 'pending'
+        && metadata().createdBy == request.auth.uid
+        && metadata().equipmentId == equipmentId
+        && metadata().storagePath == 'equipment/' + equipmentId + '/' + fileId + '/' + fileName
+        && metadata().mimeType == request.resource.contentType
+        && metadata().sizeBytes == request.resource.size;
+      allow update, delete: if false;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

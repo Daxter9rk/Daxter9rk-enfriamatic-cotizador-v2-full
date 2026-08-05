@@ -20,10 +20,15 @@ export const healthCheck = onRequest({region: 'us-central1'}, (_request, respons
 });
 
 export {recordLogin} from './auth/recordLogin';
+export {recordActivity} from './auth/recordActivity';
 export {createUser} from './users/createUser';
 export {updateUser} from './users/updateUser';
+export {claimPrimaryAdmin} from './users/claimPrimaryAdmin';
 export {issueQuote} from './quotes/issueQuote';
 export {createCorrection} from './quotes/createCorrection';
 export {transitionQuote} from './quotes/transitionQuote';
+export {transitionRequest} from './requests/transitionRequest';
+export {assignRequest} from './requests/assignRequest';
 export {downloadQuotePdf} from './documents/downloadQuotePdf';
 export {auditDomainWrite} from './audit/domainWrite';
+export {syncEquipmentIntervention} from './equipment/syncIntervention';

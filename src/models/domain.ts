@@ -46,6 +46,8 @@ export interface UserProfile {
   updatedAt: Timestamp;
   updatedBy: string | null;
   lastLoginAt?: Timestamp | null;
+  lastActivityAt?: Timestamp | null;
+  isPrimaryAdmin?: boolean;
   schemaVersion: number;
 }
 
@@ -70,6 +72,11 @@ export interface Site extends AuditFields {
   address: Address;
   contactName?: string;
   contactPhone?: string;
+  accessSchedule?: string;
+  accessInstructions?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  primaryPlanFileId?: string | null;
   status: 'active' | 'inactive';
 }
 
@@ -85,7 +92,50 @@ export interface Equipment extends AuditFields {
   capacity?: string;
   refrigerant?: string;
   technicalNotes?: string;
+  locationReference?: string;
+  operationalStatus?: 'operational' | 'limited' | 'out_of_service' | 'unknown';
+  latestDiagnosis?: string;
+  lastInterventionAt?: Timestamp | null;
   status: 'active' | 'inactive' | 'retired';
+}
+
+export interface SiteFile extends AuditFields {
+  id: string;
+  siteId: string;
+  type: 'plan' | 'sketch' | 'photo' | 'document';
+  storagePath: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  description?: string;
+  isPrimary: boolean;
+  status: 'pending' | 'ready' | 'failed';
+}
+
+export interface EquipmentFile extends AuditFields {
+  id: string;
+  equipmentId: string;
+  type: 'photo' | 'document';
+  storagePath: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  description?: string;
+  status: 'pending' | 'ready' | 'failed';
+}
+
+export interface EquipmentIntervention extends AuditFields {
+  id: string;
+  equipmentId: string;
+  siteId: string;
+  requestId?: string | null;
+  interventionType: 'inspection' | 'maintenance' | 'repair' | 'installation' | 'other';
+  diagnosis: string;
+  actions: string;
+  partsUsed: string[];
+  partsRecommended: string[];
+  resultingStatus: 'operational' | 'limited' | 'out_of_service' | 'unknown';
+  notes?: string;
 }
 
 export interface ServiceRequest extends AuditFields {
@@ -100,6 +150,18 @@ export interface ServiceRequest extends AuditFields {
   assignedTo?: string | null;
   assignedAt?: Timestamp | null;
   completedAt?: Timestamp | null;
+  finalNote?: string | null;
+  reopenedAt?: Timestamp | null;
+  reopenedBy?: string | null;
+  reopenReason?: string | null;
+  cancellationReason?: string | null;
+  workNotes?: string;
+  assignmentHistory?: Array<{
+    assignedTo: string;
+    assignedBy: string;
+    assignedAt: Timestamp;
+    note?: string | null;
+  }>;
   correctionOfRequestId?: string | null;
   correctionOfQuoteId?: string | null;
 }
@@ -220,6 +282,17 @@ export interface AuditLog {
   after?: Record<string, unknown> | null;
   metadata?: Record<string, unknown>;
   createdAt: Timestamp;
+}
+
+export interface SupportRequest extends AuditFields {
+  id: string;
+  category: 'technical' | 'access' | 'data' | 'question';
+  subject: string;
+  description: string;
+  module: string;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  appVersion: string;
+  status: 'open' | 'in_progress' | 'resolved' | 'closed';
 }
 
 export type AuthState =

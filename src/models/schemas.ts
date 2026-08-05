@@ -15,6 +15,18 @@ export const clientInputSchema = z.object({
   phone: z.string().trim().max(30).optional(),
   status: z.enum(['active', 'inactive']),
   notes: optionalText,
+  billingAddress: z
+    .object({
+      street: z.string().trim().min(1).max(160),
+      exteriorNumber: z.string().trim().max(20).optional(),
+      interiorNumber: z.string().trim().max(20).optional(),
+      neighborhood: z.string().trim().max(120).optional(),
+      city: z.string().trim().min(1).max(100),
+      state: z.string().trim().min(1).max(100),
+      postalCode: z.string().trim().min(4).max(10),
+      country: z.string().trim().min(1).max(80),
+    })
+    .optional(),
 });
 
 export const siteInputSchema = z.object({
@@ -31,6 +43,10 @@ export const siteInputSchema = z.object({
   }),
   contactName: optionalContact,
   contactPhone: z.string().trim().max(30).optional(),
+  accessSchedule: z.string().trim().max(500).optional(),
+  accessInstructions: z.string().trim().max(2000).optional(),
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
   status: z.enum(['active', 'inactive']),
 });
 
@@ -45,7 +61,23 @@ export const equipmentInputSchema = z.object({
   capacity: optionalContact,
   refrigerant: optionalContact,
   technicalNotes: optionalText,
+  locationReference: z.string().trim().max(500).optional(),
+  operationalStatus: z.enum(['operational', 'limited', 'out_of_service', 'unknown']).optional(),
+  latestDiagnosis: z.string().trim().max(2000).optional(),
   status: z.enum(['active', 'inactive', 'retired']),
+});
+
+export const equipmentInterventionInputSchema = z.object({
+  equipmentId: z.string().trim().min(1).max(128),
+  siteId: z.string().trim().min(1).max(128),
+  requestId: z.string().trim().max(128).nullable().optional(),
+  interventionType: z.enum(['inspection', 'maintenance', 'repair', 'installation', 'other']),
+  diagnosis: z.string().trim().min(1).max(2000),
+  actions: z.string().trim().min(1).max(4000),
+  partsUsed: z.array(z.string().trim().min(1).max(160)).max(50),
+  partsRecommended: z.array(z.string().trim().min(1).max(160)).max(50),
+  resultingStatus: z.enum(['operational', 'limited', 'out_of_service', 'unknown']),
+  notes: optionalText,
 });
 
 export const requestInputSchema = z.object({
@@ -117,6 +149,16 @@ export const createUserInputSchema = z.object({
   displayName: z.string().trim().min(2).max(120),
   role: z.enum(['admin', 'operator']),
   status: z.enum(['active', 'inactive', 'pending', 'suspended']),
+});
+
+export const supportRequestInputSchema = z.object({
+  category: z.enum(['technical', 'access', 'data', 'question']),
+  subject: z.string().trim().min(4).max(160),
+  description: z.string().trim().min(10).max(4000),
+  module: z.string().trim().min(1).max(80),
+  priority: z.enum(['low', 'normal', 'high', 'urgent']),
+  appVersion: z.string().trim().min(1).max(40),
+  status: z.literal('open'),
 });
 
 export type ClientInput = z.infer<typeof clientInputSchema>;

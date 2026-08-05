@@ -72,6 +72,24 @@ export function AuthProvider({children}: {children: ReactNode}) {
     [loadProfile],
   );
 
+  useEffect(() => {
+    if (state !== 'authenticated') return;
+    let lastSentAt = 0;
+    const record = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - lastSentAt < 60_000) return;
+      lastSentAt = Date.now();
+      void callFunction('recordActivity', {}).catch(() => undefined);
+    };
+    const interval = window.setInterval(record, 120_000);
+    window.addEventListener('focus', record);
+    document.addEventListener('visibilitychange', record);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', record);
+      document.removeEventListener('visibilitychange', record);
+    };
+  }, [state]);
+
   const login = useCallback(async (email: string, password: string) => {
     setMessage(null);
     setState('loading');
