@@ -10,3 +10,7 @@
 8. Tratar los mockups como sistema visual de referencia: navy, azul de acción, tarjetas claras, mobile first.
 9. Usar `Borrador sin solicitud vinculada` sólo cuando el modelo pruebe ausencia de solicitud; en el contrato actual toda cotización exige `requestId`, por lo que la etiqueta será `Borrador`.
 10. No desplegar backend sin pruebas y rollback; Hosting se limitará a canal preview.
+11. Mantener los campos V2.1 opcionales y las colecciones nuevas aditivas; no se requiere migración destructiva ni nuevos índices en este alcance.
+12. El historial de actividad se consulta por lotes limitados y se filtra incrementalmente en la vista; `lastActivityAt` se actualiza mediante callable con throttling y no representa presencia exacta.
+13. Ocultar el acceso flotante a Ayuda en móvil, donde ya existe una acción rápida equivalente, para evitar solapamientos con contenido y navegación fija.
+14. No aplicar `npm audit fix --force`: la corrección sugerida degrada `firebase-admin` a una versión mayor incompatible. Se conserva como riesgo medio hasta una actualización compatible de la cadena Google Cloud.

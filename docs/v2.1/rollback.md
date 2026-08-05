@@ -16,3 +16,25 @@
 ## Verificación
 
 Después de cualquier rollback comprobar autenticación, perfiles, solicitud, cotización emitida, descarga PDF, auditoría y reglas default-deny. Todo comando cloud deberá contener `--project enfriamatic-cotizador-de-420e5`.
+
+## Comandos operativos
+
+Crear una rama recuperable desde la línea base, sin mover tags ni reescribir `main`:
+
+```text
+git switch -c rollback/v2.0.0-dev.1 v2.0.0-dev.1
+```
+
+Desde esa rama validada, restaurar sólo los targets backend originales:
+
+```text
+npx -y firebase-tools@latest deploy --only firestore:rules,storage,functions --project enfriamatic-cotizador-de-420e5 --non-interactive
+```
+
+Antes de aceptar cualquier eliminación de las cinco Functions aditivas, confirmar que el preview y los clientes V2.1 ya no las usan. Los documentos, archivos y campos V2.1 deben conservarse como datos históricos aunque la interfaz vuelva temporalmente a V2.0.
+
+El canal temporal puede retirarse sin tocar `live`:
+
+```text
+npx -y firebase-tools@latest hosting:channel:delete v2-1-operational-redesign --project enfriamatic-cotizador-de-420e5 --force
+```
