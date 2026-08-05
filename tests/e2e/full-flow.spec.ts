@@ -80,22 +80,29 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
 
   await page.getByRole('link', {name: 'Equipos', exact: true}).click();
   await page.getByTestId('new-equipment').click();
-  await page.getByLabel('Cliente').selectOption({label: clientName});
-  await page.getByLabel('Instalación').selectOption({label: siteName});
-  await page.getByTestId('equipment-name').fill(equipmentName);
-  await page.getByLabel('Categoría').fill('Chiller');
-  await page.getByRole('button', {name: 'Guardar'}).click();
+  const equipmentDialog = page.getByRole('dialog');
+  await equipmentDialog.getByLabel('Cliente').selectOption({label: clientName});
+  await equipmentDialog.getByLabel('Instalación').selectOption({label: siteName});
+  await equipmentDialog.getByTestId('equipment-name').fill(equipmentName);
+  await equipmentDialog.getByLabel('Categoría').fill('Chiller');
+  await equipmentDialog.getByRole('button', {name: 'Guardar'}).click();
   await expect(page.getByRole('heading', {name: equipmentName})).toBeVisible();
 
   await page.getByRole('link', {name: 'Solicitudes', exact: true}).click();
   await page.getByTestId('new-request').click();
-  await page.getByLabel('Cliente').selectOption({label: clientName});
-  await page.getByLabel('Instalación').selectOption({label: siteName});
-  await page.getByLabel('Equipo').selectOption({label: equipmentName});
-  await page.getByTestId('request-title').fill(requestTitle);
-  await page.getByLabel('Descripción').fill('Validación integral con emuladores.');
-  await page.getByLabel('Asignar a').selectOption({label: 'Operador Emulador'});
-  await page.getByRole('button', {name: 'Crear solicitud'}).click();
+  const requestDialog = page.getByRole('dialog');
+  await requestDialog.getByLabel('Cliente').fill(clientName);
+  await requestDialog.getByRole('option', {name: clientName}).click();
+  await requestDialog.getByLabel('Instalación', {exact: true}).fill(siteName);
+  await requestDialog.getByRole('option', {name: siteName}).click();
+  await requestDialog.getByLabel('Equipo específico').check();
+  await requestDialog.getByLabel('Equipo', {exact: true}).fill(equipmentName);
+  await requestDialog.getByRole('option', {name: equipmentName}).click();
+  await requestDialog.getByTestId('request-title').fill(requestTitle);
+  await requestDialog.getByLabel('Descripción').fill('Validación integral con emuladores.');
+  await requestDialog.getByLabel('Responsable (opcional)').fill('Operador Emulador');
+  await requestDialog.getByRole('option', {name: /Operador Emulador/}).click();
+  await requestDialog.getByRole('button', {name: 'Crear solicitud'}).click();
   await expect(page.getByText(requestTitle)).toBeVisible();
   await logout(page);
 
@@ -158,7 +165,20 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
   await expect(page.getByText(/corrección creada/i)).toBeVisible({timeout: 15_000});
   await page.getByRole('dialog').getByRole('button', {name: 'Cerrar', exact: true}).click();
   await page.getByRole('link', {name: 'Actividad', exact: true}).click();
-  await expect(page.getByText('quote.sent')).toBeVisible();
-  await expect(page.getByText('quote.accepted')).toBeVisible();
-  await expect(page.getByText('quote.correction_created')).toBeVisible();
+  await expect(page.getByText(/marcó como enviada la cotización/i)).toBeVisible();
+  await expect(page.getByText(/aceptó la cotización/i)).toBeVisible();
+  await expect
+    .poll(
+      async () => {
+        await page.getByRole('button', {name: 'Actualizar'}).click();
+        return page.getByText(/creó una corrección de la cotización/i).count();
+      },
+      {
+        timeout: 15_000,
+        intervals: [250, 500, 1000],
+        message:
+          'El evento quote.correction_created no apareció después de refrescar la auditoría.',
+      },
+    )
+    .toBeGreaterThan(0);
 });

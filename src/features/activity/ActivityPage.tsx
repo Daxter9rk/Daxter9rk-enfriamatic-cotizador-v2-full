@@ -1,5 +1,7 @@
 import {useMemo, useState} from 'react';
+import {Link} from 'wouter';
 import {useAuth} from '../../app/providers/AuthProvider';
+import {FilterBar} from '../../components/FilterBar';
 import {PageHeader} from '../../components/PageHeader';
 import {StatePanel} from '../../components/StatePanel';
 import {useCollection} from '../../hooks/useCollection';
@@ -16,6 +18,13 @@ const actionLabels: Record<string, string> = {
   'settings.updated': 'actualizó la configuración',
   'equipmentInterventions.created': 'registró una intervención',
   'supportRequests.created': 'registró una solicitud de soporte',
+  'request.assigned': 'asignó la solicitud',
+  'request.reassigned': 'reasignó la solicitud',
+  'quote.sent': 'marcó como enviada la cotización',
+  'quote.accepted': 'aceptó la cotización',
+  'quote.rejected': 'rechazó la cotización',
+  'quote.cancelled': 'canceló la cotización',
+  'quote.correction_created': 'creó una corrección de la cotización',
 };
 
 const resourceLabels: Record<string, string> = {
@@ -42,6 +51,8 @@ export function ActivityPage() {
   const [role, setRole] = useState('all');
   const [action, setAction] = useState('all');
   const [resource, setResource] = useState('all');
+  const [result, setResult] = useState('all');
+  const [sort, setSort] = useState('newest');
   const [search, setSearch] = useState('');
   const audit = useCollection<AuditLog>(
     'auditLogs',
@@ -73,16 +84,19 @@ export function ActivityPage() {
           (role === 'all' || item.actorRole === role) &&
           (action === 'all' || item.action === action) &&
           (resource === 'all' || item.resourceType === resource) &&
+          (result === 'all' || auditResult(item) === result) &&
           (!term ||
             `${actorName} ${item.action} ${item.resourceType} ${item.resourceId}`
               .toLocaleLowerCase('es-MX')
               .includes(term))
         );
       })
-      .sort(
-        (left, right) => (right.createdAt?.toMillis?.() ?? 0) - (left.createdAt?.toMillis?.() ?? 0),
+      .sort((left, right) =>
+        sort === 'oldest'
+          ? (left.createdAt?.toMillis?.() ?? 0) - (right.createdAt?.toMillis?.() ?? 0)
+          : (right.createdAt?.toMillis?.() ?? 0) - (left.createdAt?.toMillis?.() ?? 0),
       );
-  }, [action, actor, audit.data, from, preset, resource, role, search, to, userMap]);
+  }, [action, actor, audit.data, from, preset, resource, result, role, search, sort, to, userMap]);
 
   if (audit.loading && audit.data.length === 0)
     return <StatePanel kind="loading" title="Cargando actividad…" />;
@@ -98,7 +112,30 @@ export function ActivityPage() {
           </button>
         }
       />
-      <section className="panel activity-filters" aria-label="Filtros de actividad">
+      <FilterBar
+        label="Filtros de actividad"
+        search={search}
+        searchPlaceholder="Actor, acción, folio o recurso…"
+        sort={sort}
+        sortOptions={[
+          {value: 'newest', label: 'Más recientes'},
+          {value: 'oldest', label: 'Más antiguos'},
+        ]}
+        onSearch={setSearch}
+        onSort={setSort}
+        onClear={() => {
+          setPreset('7d');
+          setFrom('');
+          setTo('');
+          setActor('all');
+          setRole('all');
+          setAction('all');
+          setResource('all');
+          setResult('all');
+          setSearch('');
+          setSort('newest');
+        }}
+      >
         <label>
           Fecha
           <select value={preset} onChange={(event) => setPreset(event.target.value as DatePreset)}>
@@ -158,20 +195,22 @@ export function ActivityPage() {
           <select value={resource} onChange={(event) => setResource(event.target.value)}>
             <option value="all">Todos</option>
             {choices.resources.map((value) => (
-              <option key={value}>{resourceLabels[value] ?? value}</option>
+              <option key={value} value={value}>
+                {resourceLabels[value] ?? value}
+              </option>
             ))}
           </select>
         </label>
-        <label className="activity-search">
-          Buscar
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Actor, acción, folio o recurso"
-          />
+        <label>
+          Resultado
+          <select value={result} onChange={(event) => setResult(event.target.value)}>
+            <option value="all">Todos</option>
+            <option value="success">Correcto</option>
+            <option value="denied">Denegado</option>
+            <option value="failed">Falló</option>
+          </select>
         </label>
-      </section>
+      </FilterBar>
       {audit.error ? (
         <StatePanel kind="error" title="No fue posible cargar la actividad">
           <button className="button button--secondary" onClick={() => void audit.reload()}>
@@ -222,6 +261,8 @@ export function ActivityPage() {
 
 function AuditEntry({item, actorName, admin}: {item: AuditLog; actorName: string; admin: boolean}) {
   const changes = summarizeChanges(item.before, item.after);
+  const reason = typeof item.metadata?.reason === 'string' ? item.metadata.reason : null;
+  const route = auditResourceRoute(item);
   return (
     <article className="audit-entry">
       <div className="audit-entry__icon" aria-hidden="true">
@@ -235,19 +276,79 @@ function AuditEntry({item, actorName, admin}: {item: AuditLog; actorName: string
           <strong>{resourceLabels[item.resourceType] ?? item.resourceType}:</strong>{' '}
           {item.quoteId ?? item.requestId ?? item.resourceId}
         </p>
+        <p>
+          Resultado: <strong>{auditResultLabel(auditResult(item))}</strong>
+        </p>
+        {reason && <p className="audit-entry__changes">Motivo: {reason}</p>}
         {changes && <p className="audit-entry__changes">{changes}</p>}
-        <time>{formatDate(item.createdAt)}</time>
+        <time title={formatDate(item.createdAt)}>
+          {relativeDate(item.createdAt?.toDate?.())} · {formatDate(item.createdAt)}
+        </time>
+        {route && <Link href={route}>Abrir recurso</Link>}
         {admin && (
           <details>
             <summary>Detalle técnico</summary>
-            <code>
-              Actor: {item.actorId} · Recurso: {item.resourceId}
-            </code>
+            <pre>
+              {JSON.stringify(
+                {
+                  actorUid: item.actorId,
+                  actorRole: item.actorRole,
+                  eventKey: item.action,
+                  resourceType: item.resourceType,
+                  resourceId: item.resourceId,
+                  result: auditResult(item),
+                  before: item.before ?? null,
+                  after: item.after ?? null,
+                  origin: item.metadata?.source ?? 'backend',
+                },
+                null,
+                2,
+              )}
+            </pre>
           </details>
         )}
       </div>
     </article>
   );
+}
+
+function auditResult(item: AuditLog) {
+  const value = item.result ?? item.metadata?.result;
+  return value === 'denied' || value === 'failed' ? value : 'success';
+}
+
+function auditResultLabel(result: string) {
+  return {success: 'Correcto', denied: 'Denegado', failed: 'Falló'}[result] ?? 'Correcto';
+}
+
+function auditResourceRoute(item: AuditLog) {
+  const id = item.resourceId;
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) return null;
+  return (
+    (
+      {
+        request: `/requests/${id}`,
+        requests: `/requests/${id}`,
+        quote: `/quotes?quote=${encodeURIComponent(id)}`,
+        quotes: `/quotes?quote=${encodeURIComponent(id)}`,
+        client: `/clients/${id}`,
+        clients: `/clients/${id}`,
+        site: `/sites/${id}`,
+        sites: `/sites/${id}`,
+        equipment: `/equipment/${id}`,
+      } as Record<string, string>
+    )[item.resourceType] ?? null
+  );
+}
+
+function relativeDate(value?: Date) {
+  if (!value) return 'Fecha no disponible';
+  const minutes = Math.max(0, Math.floor((Date.now() - value.getTime()) / 60_000));
+  if (minutes < 1) return 'Hace menos de un minuto';
+  if (minutes < 60) return `Hace ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Hace ${hours} h`;
+  return `Hace ${Math.floor(hours / 24)} d`;
 }
 
 function summarizeChanges(

@@ -85,7 +85,8 @@ export const auditDomainWrite = onDocumentWritten(
           : (after?.quoteId ?? before?.quoteId ?? null),
       before: summary(before),
       after: summary(after),
-      metadata: {source: 'firestore-trigger'},
+      metadata: {source: 'firestore-trigger', result: 'success'},
+      result: 'success',
       createdAt: FieldValue.serverTimestamp(),
     });
 

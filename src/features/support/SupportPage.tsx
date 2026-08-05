@@ -1,12 +1,26 @@
 import {useMemo, useState, type FormEvent} from 'react';
+import {deleteObject, ref, uploadBytes} from 'firebase/storage';
 import {useAuth} from '../../app/providers/AuthProvider';
 import {PageHeader} from '../../components/PageHeader';
 import {StatePanel} from '../../components/StatePanel';
 import {useCollection} from '../../hooks/useCollection';
 import type {SupportRequest} from '../../models/domain';
 import {supportRequestInputSchema} from '../../models/schemas';
-import {constraints, createDocument} from '../../services/firebase/data';
+import {
+  constraints,
+  createDocument,
+  reserveDocumentId,
+  setKnownDocument,
+  updateDocument,
+} from '../../services/firebase/data';
+import {storage} from '../../services/firebase/config';
 import {formatDate} from '../../utils/format';
+import {
+  buildPrivateStoragePath,
+  runCompensatedUpload,
+  sanitizeVisibleFileName,
+  validatePrivateFile,
+} from '../../utils/privateFiles';
 
 const faqs = [
   [
@@ -44,18 +58,58 @@ export function SupportPage() {
     setMessage(null);
     try {
       const form = new FormData(event.currentTarget);
+      const attachment = form.get('attachment');
       const input = supportRequestInputSchema.parse({
-        category: form.get('category'),
-        subject: form.get('subject'),
-        description: form.get('description'),
+        category: 'technical',
+        subject: form.get('intent'),
+        description: form.get('outcome'),
         module: form.get('module'),
-        priority: form.get('priority'),
+        priority: form.get('blocked') === 'yes' ? 'high' : 'normal',
         appVersion: '2.1.0-dev',
         status: 'open',
+        blocked: form.get('blocked') === 'yes',
+        route: window.location.pathname,
+        browser: navigator.userAgent.slice(0, 300),
+        reporterRole: profile.role,
       });
-      await createDocument('supportRequests', input, profile.uid);
+      if (attachment instanceof File && attachment.size > 0) {
+        validatePrivateFile(attachment, 'support');
+        const supportId = reserveDocumentId('supportRequests');
+        const fileId = crypto.randomUUID();
+        const storagePath = buildPrivateStoragePath('support', supportId, fileId, attachment.type);
+        await runCompensatedUpload({
+          resourceType: 'support',
+          resourceId: supportId,
+          createMetadata: () =>
+            setKnownDocument(
+              'supportRequests',
+              supportId,
+              {
+                ...input,
+                attachmentStoragePath: storagePath,
+                attachmentFileName: sanitizeVisibleFileName(attachment.name),
+                attachmentMimeType: attachment.type,
+                attachmentSizeBytes: attachment.size,
+                attachmentStatus: 'pending',
+              },
+              profile.uid,
+            ),
+          uploadStorage: () =>
+            uploadBytes(ref(storage, storagePath), attachment, {
+              contentType: attachment.type,
+              customMetadata: {resourceType: 'support', resourceId: supportId, fileId},
+            }).then(() => undefined),
+          finalizeLink: () =>
+            updateDocument('supportRequests', supportId, {attachmentStatus: 'ready'}, profile.uid),
+          cleanupStorage: () => deleteObject(ref(storage, storagePath)),
+          cleanupMetadata: () =>
+            updateDocument('supportRequests', supportId, {attachmentStatus: 'failed'}, profile.uid),
+        });
+      } else {
+        await createDocument('supportRequests', input, profile.uid);
+      }
       event.currentTarget.reset();
-      setMessage('Tu solicitud quedó registrada.');
+      setMessage('Reporte recibido. Puedes consultar su avance en esta página.');
       await requests.reload();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No fue posible registrar la solicitud.');
@@ -75,8 +129,8 @@ export function SupportPage() {
     <>
       <PageHeader
         eyebrow="Ayuda"
-        title="Manual y soporte"
-        description="Resuelve dudas o registra un problema con contexto operativo."
+        title="Ayuda y reportes"
+        description="Cuéntanos qué ocurrió con palabras sencillas; el contexto técnico se agrega automáticamente."
         actions={
           <button className="button button--secondary" onClick={() => void copyTechnicalInfo()}>
             Copiar información técnica
@@ -104,47 +158,45 @@ export function SupportPage() {
           <div className="panel__header">
             <div>
               <p className="eyebrow">Contacto</p>
-              <h2>Reportar un problema / Solicitar ayuda</h2>
+              <h2>Pedir ayuda o reportar un problema</h2>
             </div>
           </div>
           <form className="form-grid" onSubmit={(event) => void submit(event)}>
+            <label className="field-wide">
+              ¿Qué intentabas hacer?
+              <input name="intent" required minLength={4} maxLength={160} />
+            </label>
             <label>
-              Categoría
-              <select name="category" defaultValue="technical">
-                <option value="technical">Problema técnico</option>
-                <option value="access">Acceso</option>
-                <option value="data">Datos</option>
-                <option value="question">Pregunta</option>
+              ¿En qué sección ocurrió?
+              <select name="module" defaultValue="General">
+                <option>General</option>
+                <option>Inicio</option>
+                <option>Solicitudes</option>
+                <option>Cotizaciones</option>
+                <option>Instalaciones</option>
+                <option>Equipos</option>
+                <option>Configuración</option>
               </select>
             </label>
             <label>
-              Prioridad declarada
-              <select name="priority" defaultValue="normal">
-                <option value="low">Baja</option>
-                <option value="normal">Normal</option>
-                <option value="high">Alta</option>
-                <option value="urgent">Urgente</option>
+              ¿Esto te impide continuar?
+              <select name="blocked" defaultValue="no">
+                <option value="no">No</option>
+                <option value="yes">Sí</option>
               </select>
             </label>
             <label className="field-wide">
-              Asunto
-              <input name="subject" required minLength={4} maxLength={160} />
-            </label>
-            <label>
-              Módulo
-              <input name="module" required maxLength={80} defaultValue="General" />
-            </label>
-            <label>
-              Versión
-              <input value="2.1.0-dev" readOnly />
+              ¿Qué ocurrió?
+              <textarea name="outcome" required minLength={10} maxLength={4000} />
             </label>
             <label className="field-wide">
-              Descripción
-              <textarea name="description" required minLength={10} maxLength={4000} />
+              ¿Quieres agregar una captura? (JPG, PNG o WebP; máximo 5 MB)
+              <input name="attachment" type="file" accept="image/jpeg,image/png,image/webp" />
             </label>
+            <p className="form-message field-wide">No incluyas contraseñas ni datos bancarios.</p>
             {message && <p className="form-message field-wide">{message}</p>}
             <button className="button button--primary field-wide" disabled={saving}>
-              {saving ? 'Enviando…' : 'Registrar solicitud'}
+              {saving ? 'Enviando…' : 'Enviar reporte'}
             </button>
           </form>
         </section>
@@ -181,7 +233,11 @@ export function SupportPage() {
 }
 
 function statusLabel(status: SupportRequest['status']) {
-  return {open: 'Abierta', in_progress: 'En progreso', resolved: 'Resuelta', closed: 'Cerrada'}[
-    status
-  ];
+  return {
+    open: 'Reporte recibido',
+    in_progress: 'En revisión',
+    needs_information: 'Necesitamos más información',
+    resolved: 'Resuelto',
+    closed: 'Resuelto',
+  }[status];
 }
