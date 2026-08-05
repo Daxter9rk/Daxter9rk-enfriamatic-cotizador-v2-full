@@ -1,5 +1,7 @@
-import {useMemo, useState, type FormEvent} from 'react';
+import {useEffect, useMemo, useState, type FormEvent} from 'react';
+import {getBlob, ref, uploadBytes} from 'firebase/storage';
 import {useAuth} from '../../app/providers/AuthProvider';
+import {Icon} from '../../components/Icon';
 import {Modal} from '../../components/Modal';
 import {PageHeader} from '../../components/PageHeader';
 import {StatePanel} from '../../components/StatePanel';
@@ -7,6 +9,7 @@ import {useCollection} from '../../hooks/useCollection';
 import type {CatalogItem} from '../../models/domain';
 import {catalogItemInputSchema} from '../../models/schemas';
 import {constraints, setKnownDocument, updateDocument} from '../../services/firebase/data';
+import {storage} from '../../services/firebase/config';
 import {buildSearchTokens, matchesCatalogSearch, normalizeCatalogCode} from '../../utils/catalog';
 import {formatCurrency} from '../../utils/format';
 
@@ -48,6 +51,7 @@ export function CommercialCatalogPage() {
     setMessage(null);
     try {
       const form = new FormData(event.currentTarget);
+      const image = form.get('image');
       const code = normalizeCatalogCode(String(form.get('code')));
       const parsed = catalogItemInputSchema.parse({
         code,
@@ -78,6 +82,38 @@ export function CommercialCatalogPage() {
       } else {
         if (editing.code !== code) throw new Error('El código no se puede modificar.');
         await updateDocument('catalogItems', editing.id, parsed, profile.uid);
+      }
+      if (image instanceof File && image.size > 0) {
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(image.type)) {
+          throw new Error('La imagen debe ser JPG, PNG o WebP.');
+        }
+        if (image.size > 5 * 1024 * 1024) throw new Error('La imagen no puede superar 5 MB.');
+        const extension =
+          image.name
+            .split('.')
+            .pop()
+            ?.toLowerCase()
+            .replace(/[^a-z0-9]/g, '') || 'img';
+        const storagePath = `catalog/${code}/imagen-${Date.now()}.${extension}`;
+        await updateDocument(
+          'catalogItems',
+          code,
+          {
+            imageStoragePath: storagePath,
+            imageFileName: image.name.slice(0, 160),
+            imageMimeType: image.type,
+            imageSizeBytes: image.size,
+            imageStatus: 'pending',
+          },
+          profile.uid,
+        );
+        try {
+          await uploadBytes(ref(storage, storagePath), image, {contentType: image.type});
+          await updateDocument('catalogItems', code, {imageStatus: 'ready'}, profile.uid);
+        } catch (error) {
+          await updateDocument('catalogItems', code, {imageStatus: 'failed'}, profile.uid);
+          throw error;
+        }
       }
       setEditing(null);
       await catalog.reload();
@@ -171,6 +207,7 @@ export function CommercialCatalogPage() {
         <section className="catalog-grid" aria-label={`${visible.length} artículos`}>
           {visible.map((item) => (
             <article className="catalog-card" key={item.id}>
+              <CatalogImage item={item} />
               <div className="catalog-card__top">
                 <span className={`catalog-type catalog-type--${item.type}`}>
                   {item.type === 'product' ? 'Producto' : 'Servicio'}
@@ -324,11 +361,48 @@ function CatalogEditor({
           <input name="taxable" type="checkbox" defaultChecked={current?.taxable ?? true} /> Aplica
           IVA del documento
         </label>
+        <label className="field-wide">
+          Imagen opcional (JPG, PNG o WebP; máximo 5 MB)
+          <input name="image" type="file" accept="image/jpeg,image/png,image/webp" />
+          {current?.imageFileName && <small>Actual: {current.imageFileName}</small>}
+        </label>
         {message && <p className="form-message form-message--error field-wide">{message}</p>}
         <button className="button button--primary field-wide" disabled={busy}>
           {busy ? 'Guardando…' : 'Guardar artículo'}
         </button>
       </form>
     </Modal>
+  );
+}
+
+function CatalogImage({item}: {item: CatalogItem}) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!item.imageStoragePath || item.imageStatus !== 'ready') {
+      setUrl(null);
+      return;
+    }
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    void getBlob(ref(storage, item.imageStoragePath), 5 * 1024 * 1024)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+      })
+      .catch(() => setUrl(null));
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [item.imageStatus, item.imageStoragePath]);
+  return (
+    <div className="catalog-card__image">
+      {url ? (
+        <img src={url} alt="" />
+      ) : (
+        <Icon name={item.type === 'product' ? 'equipment' : 'support'} width={34} height={34} />
+      )}
+    </div>
   );
 }
