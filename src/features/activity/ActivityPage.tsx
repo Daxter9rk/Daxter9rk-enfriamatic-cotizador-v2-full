@@ -147,7 +147,9 @@ export function ActivityPage() {
           <select value={action} onChange={(event) => setAction(event.target.value)}>
             <option value="all">Todas</option>
             {choices.actions.map((value) => (
-              <option key={value} value={value}>{filterActionLabel(value)}</option>
+              <option key={value} value={value}>
+                {filterActionLabel(value)}
+              </option>
             ))}
           </select>
         </label>
@@ -285,7 +287,9 @@ function filterActionLabel(action: string) {
       'quote.cancelled': 'Cotización cancelada',
       'quote.correction_created': 'Corrección creada',
       'auth.login': 'Inicio de sesión',
-    }[action] ?? actionLabels[action] ?? 'Acción operativa'
+    }[action] ??
+    actionLabels[action] ??
+    'Acción operativa'
   );
 }
 

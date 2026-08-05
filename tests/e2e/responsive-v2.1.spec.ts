@@ -48,7 +48,10 @@ test('shell is usable without horizontal overflow at required viewport widths', 
       await expect(navigationButton).toBeVisible();
       await navigationButton.click();
       await expect(page.getByRole('navigation', {name: 'Operación'})).toBeVisible();
-      await page.getByRole('navigation', {name: 'Operación'}).getByRole('link', {name: 'Inicio'}).click();
+      await page
+        .getByRole('navigation', {name: 'Operación'})
+        .getByRole('link', {name: 'Inicio'})
+        .click();
       await expect(page.getByRole('button', {name: 'Cerrar navegación'})).toBeHidden();
     } else {
       await expect(navigationButton).toBeHidden();
