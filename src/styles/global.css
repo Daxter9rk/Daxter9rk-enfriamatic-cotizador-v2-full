@@ -825,6 +825,7 @@ input:invalid:not(:placeholder-shown) {
   font-size: 0.82rem;
 }
 .support-fab {
+  display: none;
   position: fixed;
   z-index: 24;
   right: 1rem;
@@ -1663,6 +1664,7 @@ th {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
   .support-fab {
+    display: flex;
     right: 2rem;
     bottom: 2rem;
   }
