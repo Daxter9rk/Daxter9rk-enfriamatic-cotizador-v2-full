@@ -309,6 +309,7 @@ input:invalid:not(:placeholder-shown) {
   box-shadow: var(--shadow);
   background: var(--blue-900);
   transition: transform 180ms ease;
+  overflow-y: auto;
 }
 .sidebar--open {
   transform: translateX(0);
@@ -340,7 +341,7 @@ input:invalid:not(:placeholder-shown) {
   display: grid;
   gap: 0.15rem;
   padding: 0 0.85rem;
-  overflow: auto;
+  overflow: visible;
 }
 .sidebar nav a {
   min-height: 42px;

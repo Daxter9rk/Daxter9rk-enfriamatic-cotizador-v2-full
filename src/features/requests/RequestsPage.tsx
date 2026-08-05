@@ -295,15 +295,7 @@ export function RequestsPage() {
               Asignar a
               <select name="assignedTo">
                 <option value="">Sin asignar</option>
-                {users.data
-                  .filter(
-                    (item) => item.status === 'active' && ['operator', 'admin'].includes(item.role),
-                  )
-                  .map((item) => (
-                    <option key={item.uid} value={item.uid}>
-                      {item.displayName} · {item.role === 'admin' ? 'Administrador' : 'Operador'}
-                    </option>
-                  ))}
+                <AssigneeOptions users={users.data} />
               </select>
             </label>
             {error && <p className="form-message form-message--error field-wide">{error}</p>}
@@ -458,7 +450,7 @@ function RequestDetail({
                 disabled={saving}
                 onClick={() => void transition(request, 'in_progress')}
               >
-                Iniciar trabajo
+                Iniciar solicitud
               </button>
             )}
             {request.status === 'in_progress' && (
@@ -568,17 +560,7 @@ function RequestDetail({
                   Responsable
                   <select name="assignedTo" required defaultValue={request.assignedTo ?? ''}>
                     <option value="">Selecciona</option>
-                    {users
-                      .filter(
-                        (item) =>
-                          item.status === 'active' && ['admin', 'operator'].includes(item.role),
-                      )
-                      .map((item) => (
-                        <option key={item.uid} value={item.uid}>
-                          {item.displayName} ·{' '}
-                          {item.role === 'admin' ? 'Administrador' : 'Operador'}
-                        </option>
-                      ))}
+                    <AssigneeOptions users={users} />
                   </select>
                 </label>
                 <label className="field-wide">
@@ -660,5 +642,31 @@ function ViewToggle({
         </button>
       ))}
     </div>
+  );
+}
+
+function AssigneeOptions({users}: {users: UserProfile[]}) {
+  const active = users.filter((item) => item.status === 'active');
+  return (
+    <>
+      <optgroup label="Operadores">
+        {active
+          .filter((item) => item.role === 'operator')
+          .map((item) => (
+            <option key={item.uid} value={item.uid}>
+              {item.displayName}
+            </option>
+          ))}
+      </optgroup>
+      <optgroup label="Administradores">
+        {active
+          .filter((item) => item.role === 'admin')
+          .map((item) => (
+            <option key={item.uid} value={item.uid}>
+              {item.displayName}
+            </option>
+          ))}
+      </optgroup>
+    </>
   );
 }

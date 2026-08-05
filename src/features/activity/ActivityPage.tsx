@@ -147,7 +147,7 @@ export function ActivityPage() {
           <select value={action} onChange={(event) => setAction(event.target.value)}>
             <option value="all">Todas</option>
             {choices.actions.map((value) => (
-              <option key={value}>{value}</option>
+              <option key={value} value={value}>{filterActionLabel(value)}</option>
             ))}
           </select>
         </label>
@@ -274,6 +274,19 @@ function readable(value: unknown) {
     .replace('completed', 'Completada')
     .replace('draft', 'Borrador')
     .replace('issued', 'Emitida');
+}
+
+function filterActionLabel(action: string) {
+  return (
+    {
+      'quote.sent': 'Cotización enviada',
+      'quote.accepted': 'Cotización aceptada',
+      'quote.rejected': 'Cotización rechazada',
+      'quote.cancelled': 'Cotización cancelada',
+      'quote.correction_created': 'Corrección creada',
+      'auth.login': 'Inicio de sesión',
+    }[action] ?? actionLabels[action] ?? 'Acción operativa'
+  );
 }
 
 function dateRange(preset: DatePreset, from: string, to: string) {

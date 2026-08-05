@@ -37,6 +37,11 @@ export function AppShell({children}: {children: ReactNode}) {
   const {profile, logout} = useAuth();
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
+  const operationItems = operationalLinks.map((item) =>
+    item.href === '/requests' && profile?.role === 'operator'
+      ? {...item, label: 'Mis solicitudes'}
+      : item,
+  );
 
   return (
     <div className="app-shell">
@@ -58,7 +63,7 @@ export function AppShell({children}: {children: ReactNode}) {
         </div>
         <NavigationGroup
           label="Operación"
-          items={operationalLinks}
+          items={operationItems}
           location={location}
           close={() => setOpen(false)}
         />
@@ -105,7 +110,7 @@ export function AppShell({children}: {children: ReactNode}) {
         <div className="page-content">{children}</div>
       </main>
       <nav className="mobile-bottom-nav" aria-label="Accesos móviles">
-        {operationalLinks.slice(0, 5).map((item) => (
+        {operationItems.slice(0, 5).map((item) => (
           <NavigationLink
             key={item.href}
             item={item}
