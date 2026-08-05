@@ -15,8 +15,10 @@ describe('QuotesPage guided creation', () => {
     const user = userEvent.setup();
     render(<QuotesPage />);
     await user.click(screen.getByRole('button', {name: 'Nueva cotización'}));
-    expect(screen.getByText('Cliente')).toBeVisible();
-    expect(screen.getByText('Instalación')).toBeVisible();
+    expect(screen.getAllByText('Cliente').some((element) => element.matches('strong'))).toBe(true);
+    expect(screen.getAllByText('Instalación').some((element) => element.matches('strong'))).toBe(
+      true,
+    );
     expect(screen.getByText(/aún no puedes crear/i)).toBeVisible();
     expect(screen.getByRole('button', {name: 'Crear cotización'})).toBeDisabled();
     expect(screen.getByRole('link', {name: 'Gestionar solicitudes'})).toHaveAttribute(

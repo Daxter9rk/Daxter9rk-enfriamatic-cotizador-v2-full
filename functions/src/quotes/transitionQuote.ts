@@ -36,15 +36,30 @@ export const transitionQuote = onCall(
       }
 
       const now = FieldValue.serverTimestamp();
+      const event = {
+        from,
+        to,
+        actorId: actor.uid,
+        actorName: actor.displayName,
+        actorRole: actor.role,
+        at: new Date(),
+        reason: reason ?? null,
+      };
+      const rejectionUpdate: Record<string, unknown> = {};
+      if (to === 'rejected') {
+        Object.assign(rejectionUpdate, {
+          lastRejectionReason: reason,
+          lastRejectedAt: now,
+          lastRejectedBy: actor.uid,
+          lastRejectedByName: actor.displayName,
+          lastRejectedByRole: actor.role,
+        });
+      }
       transaction.update(quoteRef, {
         status: to,
-        commercialTransition: {
-          from,
-          to,
-          actorId: actor.uid,
-          at: now,
-          reason: reason ?? null,
-        },
+        commercialTransition: {...event, at: now},
+        commercialHistory: FieldValue.arrayUnion(event),
+        ...rejectionUpdate,
         updatedAt: now,
         updatedBy: actor.uid,
       });
@@ -58,7 +73,8 @@ export const transitionQuote = onCall(
         quoteId,
         before: {status: from},
         after: {status: to},
-        metadata: {reason: reason ?? null},
+        metadata: {reason: reason ?? null, result: 'success'},
+        result: 'success',
         createdAt: now,
       });
 
@@ -71,7 +87,10 @@ export const transitionQuote = onCall(
           userId,
           type: `quote_${to}`,
           title: `Cotización ${String(quote.folio)} ${statusLabel(to)}`,
-          message: `El estado comercial cambió de ${statusLabel(from)} a ${statusLabel(to)}.`,
+          message:
+            to === 'rejected'
+              ? `La cotización fue rechazada. Motivo: ${String(reason)}`
+              : `El estado comercial cambió de ${statusLabel(from)} a ${statusLabel(to)}.`,
           resourceType: 'quote',
           resourceId: quoteId,
           read: false,

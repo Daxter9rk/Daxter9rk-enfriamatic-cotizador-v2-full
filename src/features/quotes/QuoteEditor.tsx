@@ -4,6 +4,7 @@ import {Modal} from '../../components/Modal';
 import type {
   CatalogItem,
   Client,
+  Equipment,
   Quote,
   QuoteItem,
   QuoteStatus,
@@ -20,7 +21,7 @@ import {
 } from '../../services/firebase/data';
 import {calculateItem, calculateQuoteTotals, discountModeLabel} from '../../utils/calculations';
 import {catalogItemToQuoteInput, matchesCatalogSearch} from '../../utils/catalog';
-import {formatCurrency, safeFileName} from '../../utils/format';
+import {formatCurrency, formatDate, safeFileName} from '../../utils/format';
 
 interface IssueResult {
   quoteId: string;
@@ -41,6 +42,7 @@ export function QuoteEditor({
   catalog,
   client,
   site,
+  equipment,
   onClose,
   onChanged,
 }: {
@@ -50,6 +52,7 @@ export function QuoteEditor({
   catalog: CatalogItem[];
   client: Client | undefined;
   site: Site | undefined;
+  equipment: Equipment | undefined;
   onClose(): void;
   onChanged(): Promise<void>;
 }) {
@@ -161,8 +164,8 @@ export function QuoteEditor({
           idempotencyKey: crypto.randomUUID(),
         },
       );
-      setMessage(`Cotización ${result.folio} emitida correctamente.`);
       await onChanged();
+      setMessage(`Cotización ${result.folio} emitida correctamente.`);
     } catch {
       setMessage('La emisión no concluyó. El borrador permanece editable y puede reintentarse.');
     } finally {
@@ -214,9 +217,9 @@ export function QuoteEditor({
         to: transitionTarget,
         reason: String(form.get('reason') ?? '').trim() || null,
       });
-      setMessage(`Estado actualizado a ${transitionLabel(transitionTarget)}.`);
       setTransitionTarget(null);
       await onChanged();
+      setMessage(`Estado actualizado a ${transitionLabel(transitionTarget)}.`);
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : 'No se pudo actualizar el estado comercial.',
@@ -248,6 +251,17 @@ export function QuoteEditor({
             <p>Cargando partidas…</p>
           ) : (
             <>
+              {quote.status === 'rejected' && quote.lastRejectionReason && (
+                <section className="quote-rejection" role="status">
+                  <strong>Cotización rechazada</strong>
+                  <p>Motivo: {quote.lastRejectionReason}</p>
+                  <small>
+                    Registrado por {quote.lastRejectedByName || 'Administrador/a'} ·{' '}
+                    {quote.lastRejectedByRole === 'operator' ? 'Operador/a' : 'Administrador/a'} ·{' '}
+                    {quote.lastRejectedAt ? formatDate(quote.lastRejectedAt) : 'Fecha registrada'}
+                  </small>
+                </section>
+              )}
               <div className="quote-items">
                 {items.length === 0 ? (
                   <p className="empty-copy">Agrega al menos una partida para emitir.</p>
@@ -336,6 +350,23 @@ export function QuoteEditor({
                 onTarget={setTransitionTarget}
                 onSubmit={transition}
               />
+              {quote.commercialHistory && quote.commercialHistory.length > 0 && (
+                <section className="commercial-history">
+                  <h3>Historial comercial</h3>
+                  {quote.commercialHistory.map((event, index) => (
+                    <article key={`${event.to}-${index}`}>
+                      <strong>
+                        {transitionLabel(event.from)} → {transitionLabel(event.to)}
+                      </strong>
+                      {event.reason && <p>Motivo: {event.reason}</p>}
+                      <small>
+                        {event.actorName || 'Usuario autorizado'} ·{' '}
+                        {event.at ? formatDate(event.at) : 'Fecha registrada'}
+                      </small>
+                    </article>
+                  ))}
+                </section>
+              )}
               {message && (
                 <p className="form-message" role="status">
                   {message}
@@ -362,6 +393,7 @@ export function QuoteEditor({
           items={items}
           client={client}
           site={site}
+          equipment={equipment}
           totals={totals}
           onClose={() => setPreview(false)}
         />
@@ -655,6 +687,7 @@ function Preview({
   items,
   client,
   site,
+  equipment,
   totals,
   onClose,
 }: {
@@ -662,31 +695,91 @@ function Preview({
   items: QuoteItem[];
   client: Client | undefined;
   site: Site | undefined;
+  equipment: Equipment | undefined;
   totals: ReturnType<typeof calculateQuoteTotals>;
   onClose(): void;
 }) {
+  const pages = chunkQuoteItems(items, 10);
   return (
     <div className="preview-overlay">
       <button className="icon-button" aria-label="Cerrar vista previa" onClick={onClose}>
         ×
       </button>
-      <article className="quote-preview">
-        <h2>{quote.folio || 'BORRADOR'}</h2>
-        <p>
-          {client?.name} · {site?.name}
-        </p>
-        <p>{discountModeLabel[quote.discountDisplayMode]}</p>
-        {items.map((item) => (
-          <div key={item.id}>
-            <span>
-              {item.quantity} × {item.description}
-            </span>
-            <strong>{formatCurrency(item.lineSubtotal)}</strong>
-          </div>
+      <section className="quote-preview-pages" aria-label="Vista previa del documento">
+        {pages.map((pageItems, pageIndex) => (
+          <article className="quote-preview" key={pageIndex}>
+            <span className="quote-preview__watermark">DOCUMENTO DE PRUEBA DEV</span>
+            <header className="quote-preview__header">
+              <div>
+                <strong>ENFRIAMATIC</strong>
+                <small>Cotizador V2.1</small>
+              </div>
+              <div>
+                <h2>{quote.folio || 'BORRADOR'}</h2>
+                <span>
+                  Fecha: {formatDate(quote.issuedAt ?? quote.createdAt)} · Vigencia:{' '}
+                  {quote.validityDays} días
+                </span>
+              </div>
+            </header>
+            <section className="quote-preview__customer">
+              <div>
+                <span>Cliente</span>
+                <strong>{client?.name ?? quote.clientId}</strong>
+              </div>
+              <div>
+                <span>Instalación</span>
+                <strong>{site?.name ?? quote.siteId}</strong>
+              </div>
+              {quote.equipmentId && (
+                <div>
+                  <span>Equipo</span>
+                  <strong>{equipment?.name ?? quote.equipmentId}</strong>
+                </div>
+              )}
+            </section>
+            <div className="quote-preview__table">
+              <div className="quote-preview__row quote-preview__row--head">
+                <span>Cant.</span>
+                <span>Descripción</span>
+                <span>Precio</span>
+                <span>Importe</span>
+              </div>
+              {pageItems.map((item) => (
+                <div className="quote-preview__row" key={item.id}>
+                  <span>
+                    {item.quantity} {item.unit}
+                  </span>
+                  <span>{item.description}</span>
+                  <span>{formatCurrency(item.finalUnitPrice)}</span>
+                  <strong>{formatCurrency(item.lineSubtotal)}</strong>
+                </div>
+              ))}
+            </div>
+            {pageIndex === pages.length - 1 && (
+              <div className="quote-preview__closing">
+                <section>
+                  <strong>Condiciones comerciales</strong>
+                  <p>{quote.notes || 'Precios en MXN. Vigencia indicada en este documento.'}</p>
+                  <small>{discountModeLabel[quote.discountDisplayMode]}</small>
+                </section>
+                <Totals quote={quote} totals={totals} />
+              </div>
+            )}
+            <footer>
+              Página {pageIndex + 1} de {pages.length} · Enfriamatic
+            </footer>
+          </article>
         ))}
-        <footer>Total {formatCurrency(totals.grandTotal)} MXN</footer>
-      </article>
+      </section>
     </div>
+  );
+}
+
+export function chunkQuoteItems(items: QuoteItem[], pageSize: number) {
+  if (items.length === 0) return [[]];
+  return Array.from({length: Math.ceil(items.length / pageSize)}, (_, index) =>
+    items.slice(index * pageSize, (index + 1) * pageSize),
   );
 }
 

@@ -72,6 +72,9 @@ test('admin rechaza y cancela cotizaciones con motivo, auditoría y notificació
 
     expect(rejected.get('status')).toBe('rejected');
     expect(rejected.get('commercialTransition.reason')).toBe('Cliente pospuso el proyecto');
+    expect(rejected.get('lastRejectionReason')).toBe('Cliente pospuso el proyecto');
+    expect(rejected.get('lastRejectedByName')).toBe('Admin Emulador');
+    expect(rejected.get('commercialHistory')).toHaveLength(1);
     expect(cancelled.get('status')).toBe('cancelled');
     expect(cancelled.get('commercialTransition.reason')).toBe('Alcance retirado por cliente');
     expect(
@@ -84,6 +87,11 @@ test('admin rechaza y cancela cotizaciones con motivo, auditoría y notificació
       'quote_cancelled',
       'quote_rejected',
     ]);
+    expect(
+      notifications.docs.some((item) =>
+        String(item.get('message')).includes('Cliente pospuso el proyecto'),
+      ),
+    ).toBe(true);
   } finally {
     await auth.signOut();
     await deleteApp(clientApp);

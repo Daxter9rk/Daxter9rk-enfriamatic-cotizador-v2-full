@@ -5,6 +5,7 @@ import {useRealtimeCollection} from '../hooks/useRealtimeCollection';
 import type {Notification} from '../models/domain';
 import {constraints, markNotificationRead} from '../services/firebase/data';
 import {formatDate} from '../utils/format';
+import {notificationActionLabel, notificationRoute} from '../utils/notifications';
 import {Icon} from './Icon';
 
 export function NotificationCenter() {
@@ -12,6 +13,8 @@ export function NotificationCenter() {
   const [, navigate] = useLocation();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Notification | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const queryConstraints = useMemo(
     () => (profile ? [constraints.notificationsFor(profile.uid), constraints.newest()] : []),
     [profile],
@@ -25,12 +28,28 @@ export function NotificationCenter() {
   const unread = notifications.data.filter((item) => !item.read);
 
   const inspect = async (notification: Notification) => {
-    setSelected(notification);
-    if (!notification.read) await markNotificationRead(notification.id);
+    if (busyId) return;
+    setBusyId(notification.id);
+    setMessage(null);
+    try {
+      if (!notification.read) await markNotificationRead(notification.id);
+      const route = notificationRoute(notification);
+      if (route) {
+        setOpen(false);
+        setSelected(null);
+        navigate(route);
+      } else {
+        setSelected(notification);
+      }
+    } catch {
+      setMessage('No fue posible abrir la notificación. Inténtalo de nuevo.');
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const openResource = (notification: Notification) => {
-    const route = resourceRoute(notification);
+    const route = notificationRoute(notification);
     setOpen(false);
     setSelected(null);
     if (route) navigate(route);
@@ -68,6 +87,7 @@ export function NotificationCenter() {
           {notifications.error && (
             <p className="form-message form-message--error">{notifications.error}</p>
           )}
+          {message && <p className="form-message form-message--error">{message}</p>}
           {notifications.loading ? (
             <p className="empty-copy">Actualizando…</p>
           ) : notifications.data.length === 0 ? (
@@ -78,6 +98,7 @@ export function NotificationCenter() {
                 <button
                   key={notification.id}
                   className={!notification.read ? 'unread' : undefined}
+                  disabled={busyId === notification.id}
                   onClick={() => void inspect(notification)}
                 >
                   <span className="notification-list__icon">
@@ -97,9 +118,9 @@ export function NotificationCenter() {
               <strong>{selected.title}</strong>
               <p>{selected.message}</p>
               <small>{formatDate(selected.createdAt)}</small>
-              {resourceRoute(selected) ? (
+              {notificationRoute(selected) ? (
                 <button className="button button--primary" onClick={() => openResource(selected)}>
-                  Abrir recurso
+                  {notificationActionLabel(selected.resourceType)}
                 </button>
               ) : (
                 <p className="empty-copy">
@@ -111,20 +132,5 @@ export function NotificationCenter() {
         </section>
       )}
     </div>
-  );
-}
-
-function resourceRoute(notification: Notification): string | null {
-  if (!notification.resourceId) return null;
-  return (
-    (
-      {
-        request: `/requests/${notification.resourceId}`,
-        quote: `/quotes?quote=${notification.resourceId}`,
-        client: `/clients/${notification.resourceId}`,
-        site: `/sites/${notification.resourceId}`,
-        equipment: `/equipment/${notification.resourceId}`,
-      } as Record<string, string>
-    )[notification.resourceType ?? ''] ?? null
   );
 }

@@ -2,10 +2,20 @@ import {useEffect, useMemo, useState, type FormEvent} from 'react';
 import {Link, useSearch} from 'wouter';
 import {useAuth} from '../../app/providers/AuthProvider';
 import {Modal} from '../../components/Modal';
+import {FilterBar} from '../../components/FilterBar';
 import {PageHeader} from '../../components/PageHeader';
 import {StatePanel} from '../../components/StatePanel';
 import {useCollection} from '../../hooks/useCollection';
-import type {CatalogItem, Client, Quote, ServiceRequest, Site, UserRole} from '../../models/domain';
+import type {
+  CatalogItem,
+  Client,
+  Equipment,
+  Quote,
+  ServiceRequest,
+  Site,
+  UserProfile,
+  UserRole,
+} from '../../models/domain';
 import {constraints, createDocument, getDocument} from '../../services/firebase/data';
 import {formatCurrency, formatDate} from '../../utils/format';
 import {QuoteEditor} from './QuoteEditor';
@@ -20,10 +30,17 @@ export function QuotesPage() {
   const requests = useCollection<ServiceRequest>('requests', operatorFilter);
   const clients = useCollection<Client>('clients', masterDataFilter);
   const sites = useCollection<Site>('sites', masterDataFilter);
+  const equipment = useCollection<Equipment>('equipment', masterDataFilter);
   const catalog = useCollection<CatalogItem>('catalogItems', [constraints.activeOnly()], 100);
+  const users = useCollection<UserProfile>('users', [], 100, profile?.role === 'admin');
   const [selected, setSelected] = useState<Quote | null>(null);
   const [creating, setCreating] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [quoteSearch, setQuoteSearch] = useState('');
+  const [clientFilter, setClientFilter] = useState('all');
+  const [creatorFilter, setCreatorFilter] = useState('all');
+  const [fromDate, setFromDate] = useState('');
+  const [sort, setSort] = useState('newest');
   const [view, setView] = useState<'cards' | 'list' | 'table'>(
     () =>
       (localStorage.getItem('enfriamatic:quotes-view') as 'cards' | 'list' | 'table') || 'cards',
@@ -36,19 +53,47 @@ export function QuotesPage() {
     if (quoteId && !selected) {
       const target = quotes.data.find((quote) => quote.id === quoteId);
       if (target) setSelected(target);
+      else if (!quotes.loading) {
+        setMessage('La cotización no existe o no tienes permiso para consultarla.');
+      }
     }
-  }, [quotes.data, search, selected]);
+  }, [quotes.data, quotes.loading, search, selected]);
 
   const validRequests = requests.data.filter((request) =>
     ['assigned', 'in_progress'].includes(request.status),
   );
-  const visible = useMemo(
-    () =>
-      statusFilter === 'all'
-        ? quotes.data
-        : quotes.data.filter((quote) => quote.status === statusFilter),
-    [quotes.data, statusFilter],
-  );
+  const visible = useMemo(() => {
+    const term = quoteSearch.trim().toLocaleLowerCase('es-MX');
+    const start = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : 0;
+    return quotes.data
+      .filter((quote) => {
+        const clientName = clients.data.find((client) => client.id === quote.clientId)?.name ?? '';
+        return (
+          (statusFilter === 'all' || quote.status === statusFilter) &&
+          (clientFilter === 'all' || quote.clientId === clientFilter) &&
+          (creatorFilter === 'all' || quote.createdBy === creatorFilter) &&
+          (!start || (quote.createdAt?.toMillis?.() ?? 0) >= start) &&
+          (!term || `${quote.folio} ${clientName}`.toLocaleLowerCase('es-MX').includes(term))
+        );
+      })
+      .sort((left, right) => {
+        if (sort === 'oldest')
+          return (left.createdAt?.toMillis?.() ?? 0) - (right.createdAt?.toMillis?.() ?? 0);
+        if (sort === 'amount-desc') return right.grandTotal - left.grandTotal;
+        if (sort === 'amount-asc') return left.grandTotal - right.grandTotal;
+        if (sort === 'az') return left.folio.localeCompare(right.folio, 'es-MX');
+        return (right.createdAt?.toMillis?.() ?? 0) - (left.createdAt?.toMillis?.() ?? 0);
+      });
+  }, [
+    clientFilter,
+    clients.data,
+    creatorFilter,
+    fromDate,
+    quoteSearch,
+    quotes.data,
+    sort,
+    statusFilter,
+  ]);
 
   const createQuote = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -120,7 +165,28 @@ export function QuotesPage() {
           </button>
         }
       />
-      <section className="toolbar">
+      <FilterBar
+        search={quoteSearch}
+        searchPlaceholder="Folio o cliente…"
+        sort={sort}
+        sortOptions={[
+          {value: 'newest', label: 'Más recientes'},
+          {value: 'oldest', label: 'Más antiguas'},
+          {value: 'amount-desc', label: 'Mayor monto'},
+          {value: 'amount-asc', label: 'Menor monto'},
+          {value: 'az', label: 'A–Z'},
+        ]}
+        onSearch={setQuoteSearch}
+        onSort={setSort}
+        onClear={() => {
+          setQuoteSearch('');
+          setStatusFilter('all');
+          setClientFilter('all');
+          setCreatorFilter('all');
+          setFromDate('');
+          setSort('newest');
+        }}
+      >
         <label>
           Estado
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
@@ -132,6 +198,41 @@ export function QuotesPage() {
             <option value="rejected">Rechazada</option>
             <option value="cancelled">Cancelada</option>
           </select>
+        </label>
+        <label>
+          Cliente
+          <select value={clientFilter} onChange={(event) => setClientFilter(event.target.value)}>
+            <option value="all">Todos</option>
+            {clients.data.map((client) => (
+              <option key={client.id} value={client.id}>
+                {client.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {profile?.role === 'admin' && (
+          <label>
+            Creador
+            <select
+              value={creatorFilter}
+              onChange={(event) => setCreatorFilter(event.target.value)}
+            >
+              <option value="all">Todos</option>
+              {users.data.map((user) => (
+                <option key={user.uid} value={user.uid}>
+                  {user.displayName}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label>
+          Desde
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(event) => setFromDate(event.target.value)}
+          />
         </label>
         <span>{visible.length} cotizaciones</span>
         <div className="view-toggle" role="group" aria-label="Vista de cotizaciones">
@@ -149,7 +250,7 @@ export function QuotesPage() {
             </button>
           ))}
         </div>
-      </section>
+      </FilterBar>
       {quotes.error ? (
         <StatePanel kind="error" title="No fue posible cargar cotizaciones">
           <button className="button button--secondary" onClick={() => void quotes.reload()}>
@@ -227,6 +328,7 @@ export function QuotesPage() {
           catalog={catalog.data}
           client={clients.data.find((client) => client.id === selected.clientId)}
           site={sites.data.find((site) => site.id === selected.siteId)}
+          equipment={equipment.data.find((item) => item.id === selected.equipmentId)}
           onClose={() => setSelected(null)}
           onChanged={async () => {
             await quotes.reload();

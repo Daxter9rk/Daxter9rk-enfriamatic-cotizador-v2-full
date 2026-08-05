@@ -89,6 +89,7 @@ export const createCorrection = onCall(
         clientId: originalRequest.clientId,
         siteId: originalRequest.siteId,
         equipmentId: originalRequest.equipmentId ?? null,
+        scope: originalRequest.equipmentId ? 'equipment' : 'site',
         title: `Corrección de ${String(originalQuote.folio)}`,
         description: `Solicitud de corrección relacionada con ${String(originalQuote.folio)}.`,
         priority: originalRequest.priority ?? 'normal',
