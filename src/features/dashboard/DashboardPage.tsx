@@ -1,37 +1,58 @@
+import {useEffect, useMemo, useState} from 'react';
 import {Link} from 'wouter';
 import {useAuth} from '../../app/providers/AuthProvider';
+import {Icon, type IconName} from '../../components/Icon';
 import {PageHeader} from '../../components/PageHeader';
 import {StatePanel} from '../../components/StatePanel';
-import type {Notification, Quote, ServiceRequest, UserProfile} from '../../models/domain';
+import type {Quote, ServiceRequest, UserProfile} from '../../models/domain';
 import {constraints} from '../../services/firebase/data';
 import {useCollection} from '../../hooks/useCollection';
 import {formatCurrency, formatDate} from '../../utils/format';
 
+const requestLabels = {
+  pending: 'Pendiente',
+  assigned: 'Asignada',
+  in_progress: 'En progreso',
+  completed: 'Completada',
+  cancelled: 'Cancelada',
+} as const;
+
 export function DashboardPage() {
   const {profile} = useAuth();
-  const requestConstraints =
-    profile?.role === 'operator' ? [constraints.assignedTo(profile.uid)] : [];
-  const requests = useCollection<ServiceRequest>('requests', requestConstraints, 20);
-  const quotes = useCollection<Quote>(
-    'quotes',
-    profile?.role === 'operator' ? [constraints.assignedTo(profile.uid)] : [],
-    20,
+  const requestConstraints = useMemo(
+    () => (profile?.role === 'operator' ? [constraints.assignedTo(profile.uid)] : []),
+    [profile],
   );
-  const notifications = useCollection<Notification>(
-    'notifications',
-    profile ? [constraints.notificationsFor(profile.uid)] : [],
-    8,
+  const quoteConstraints = useMemo(
+    () => (profile?.role === 'operator' ? [constraints.assignedTo(profile.uid)] : []),
+    [profile],
   );
-  const users = useCollection<UserProfile>('users', [], 30, profile?.role === 'admin');
+  const requests = useCollection<ServiceRequest>('requests', requestConstraints, 50);
+  const quotes = useCollection<Quote>('quotes', quoteConstraints, 50);
+  const users = useCollection<UserProfile>('users', [], 100, profile?.role === 'admin');
+  const [refreshing, setRefreshing] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState(new Date());
+  const [, tick] = useState(0);
 
-  if (requests.loading || quotes.loading) {
+  useEffect(() => {
+    const timer = window.setInterval(() => tick((value) => value + 1), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const refresh = async () => {
+    setRefreshing(true);
+    await Promise.all([requests.reload(), quotes.reload(), users.reload()]);
+    setUpdatedAt(new Date());
+    setRefreshing(false);
+  };
+
+  if (requests.loading || quotes.loading)
     return <StatePanel kind="loading" title="Preparando tu panel…" />;
-  }
   if (requests.error || quotes.error) {
     return (
       <StatePanel kind="error" title="No fue posible cargar el panel">
         <p>{requests.error ?? quotes.error}</p>
-        <button className="button button--secondary" onClick={() => void requests.reload()}>
+        <button className="button button--secondary" onClick={() => void refresh()}>
           Reintentar
         </button>
       </StatePanel>
@@ -43,11 +64,20 @@ export function DashboardPage() {
   const inProgress = requests.data.filter((item) => item.status === 'in_progress').length;
   const drafts = quotes.data.filter((item) => item.status === 'draft').length;
   const failed = quotes.data.filter((item) => item.documentStatus === 'failed').length;
-  const issuedTotal = quotes.data
-    .filter((item) => item.status === 'issued')
-    .reduce((sum, item) => sum + item.grandTotal, 0);
-  const activeOperators = users.data.filter(
-    (item) => item.role === 'operator' && item.status === 'active',
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const issuedThisMonth = quotes.data.filter(
+    (item) => item.issuedAt?.toDate && item.issuedAt.toDate() >= monthStart,
+  );
+  const issuedTotal = issuedThisMonth.reduce((sum, item) => sum + item.grandTotal, 0);
+  const recentThreshold = Date.now() - 5 * 60_000;
+  const recentOperators = users.data.filter(
+    (item) =>
+      item.role === 'operator' &&
+      item.status === 'active' &&
+      item.lastActivityAt?.toMillis &&
+      item.lastActivityAt.toMillis() >= recentThreshold,
   ).length;
 
   return (
@@ -57,24 +87,76 @@ export function DashboardPage() {
         title={`Buen día, ${profile?.displayName.split(' ')[0] ?? ''}`}
         description={
           profile?.role === 'admin'
-            ? 'Visibilidad inmediata sobre solicitudes, cotizaciones y excepciones.'
-            : 'Tus asignaciones y borradores prioritarios están reunidos aquí.'
+            ? 'Prioridades, excepciones y acciones operativas en una sola vista.'
+            : 'Tus asignaciones y cotizaciones prioritarias están reunidas aquí.'
+        }
+        actions={
+          <div className="refresh-control">
+            <button
+              className="button button--secondary"
+              onClick={() => void refresh()}
+              disabled={refreshing}
+            >
+              <Icon name="refresh" />
+              {refreshing ? 'Actualizando…' : 'Actualizar datos'}
+            </button>
+            <small>Actualizado {relativeTime(updatedAt)}</small>
+          </div>
         }
       />
-      <section className="metrics-grid" aria-label="Indicadores">
+      <section className="dashboard-actions" aria-label="Acciones rápidas">
+        <QuickAction href="/requests?new=1" icon="request" label="Nueva solicitud" adminOnly />
+        <QuickAction href="/quotes?new=1" icon="quote" label="Nueva cotización" />
+        <QuickAction href="/clients?new=1" icon="client" label="Registrar cliente" adminOnly />
+        <QuickAction href="/sites?new=1" icon="site" label="Nueva instalación" adminOnly />
+        <QuickAction href="/equipment?new=1" icon="equipment" label="Registrar equipo" adminOnly />
+        <QuickAction href="/support" icon="support" label="Manual / Soporte" />
+      </section>
+      {failed > 0 && (
+        <Link href="/quotes?documentStatus=failed" className="dashboard-alert">
+          <span>
+            <strong>
+              {failed} PDF {failed === 1 ? 'requiere' : 'requieren'} atención
+            </strong>
+            <small>El folio se conserva; abre la cotización para reintentar.</small>
+          </span>
+          <span>Revisar →</span>
+        </Link>
+      )}
+      <section className="metrics-grid metrics-grid--operational" aria-label="Indicadores">
         <Metric
+          href="/requests?status=pending"
+          icon="request"
           label={profile?.role === 'admin' ? 'Pendientes' : 'Asignadas'}
           value={profile?.role === 'admin' ? pending : assigned}
+          tone="warning"
         />
-        <Metric label="En progreso" value={inProgress} />
-        <Metric label="Borradores" value={drafts} />
-        {profile?.role === 'admin' ? (
-          <>
-            <Metric label="PDF con fallo" value={failed} critical={failed > 0} />
-            <Metric label="Operadores activos" value={activeOperators} />
-            <Metric label="Emitido reciente" value={formatCurrency(issuedTotal)} />
-          </>
-        ) : null}
+        <Metric
+          href="/requests?status=in_progress"
+          icon="activity"
+          label="En progreso"
+          value={inProgress}
+        />
+        <Metric href="/quotes?status=draft" icon="quote" label="Borradores" value={drafts} />
+        {profile?.role === 'admin' && (
+          <Metric
+            href="/users?recent=1"
+            icon="users"
+            label="Operadores con actividad reciente"
+            value={recentOperators}
+            tone="success"
+          />
+        )}
+        {profile?.role === 'admin' && (
+          <Metric
+            href="/quotes?period=current-month"
+            icon="quote"
+            label="Monto emitido del mes"
+            value={formatCurrency(issuedTotal)}
+            caption={`${issuedThisMonth.length} cotizaciones emitidas`}
+            wide
+          />
+        )}
       </section>
       <div className="dashboard-grid">
         <section className="panel">
@@ -89,12 +171,13 @@ export function DashboardPage() {
             <p className="empty-copy">No hay solicitudes en este momento.</p>
           ) : (
             <div className="stack-list">
-              {requests.data.slice(0, 6).map((request) => (
+              {requests.data.slice(0, 7).map((request) => (
                 <Link href={`/requests/${request.id}`} className="stack-row" key={request.id}>
                   <div>
                     <strong>{request.title}</strong>
                     <span>
-                      {request.priority} · {request.status}
+                      {requestLabels[request.status]} · {priorityLabel(request.priority)} ·{' '}
+                      {formatDate(request.updatedAt)}
                     </span>
                   </div>
                   <span>→</span>
@@ -106,60 +189,108 @@ export function DashboardPage() {
         <section className="panel">
           <div className="panel__header">
             <div>
-              <p className="eyebrow">Atención</p>
-              <h2>Notificaciones</h2>
+              <p className="eyebrow">Enfoque</p>
+              <h2>Qué atender ahora</h2>
             </div>
           </div>
-          {notifications.data.length === 0 ? (
-            <p className="empty-copy">Sin novedades pendientes.</p>
-          ) : (
-            <div className="stack-list">
-              {notifications.data.slice(0, 6).map((notification) => (
-                <div className="stack-row" key={notification.id}>
-                  <div>
-                    <strong>{notification.title}</strong>
-                    <span>{formatDate(notification.createdAt)}</span>
-                  </div>
-                  {!notification.read && <span className="status-dot" aria-label="No leída" />}
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="focus-list">
+            <FocusItem
+              value={pending}
+              label="solicitudes pendientes por asignar"
+              href="/requests?status=pending"
+            />
+            <FocusItem
+              value={inProgress}
+              label="trabajos actualmente en progreso"
+              href="/requests?status=in_progress"
+            />
+            <FocusItem
+              value={drafts}
+              label="cotizaciones en borrador"
+              href="/quotes?status=draft"
+            />
+          </div>
         </section>
       </div>
-      <section className="quick-actions">
-        <h2>Accesos rápidos</h2>
-        <div>
-          {profile?.role === 'admin' && (
-            <Link className="button button--primary" href="/requests?new=1">
-              Nueva solicitud
-            </Link>
-          )}
-          <Link className="button button--secondary" href="/quotes">
-            Abrir cotizaciones
-          </Link>
-          <Link className="button button--ghost" href="/manual">
-            Consultar manual
-          </Link>
-        </div>
-      </section>
+      <Link className="support-fab" href="/support">
+        <Icon name="support" />
+        <span>Ayuda</span>
+      </Link>
     </>
   );
+
+  function QuickAction({
+    href,
+    icon,
+    label,
+    adminOnly = false,
+  }: {
+    href: string;
+    icon: IconName;
+    label: string;
+    adminOnly?: boolean;
+  }) {
+    if (adminOnly && profile?.role !== 'admin') return null;
+    return (
+      <Link href={href}>
+        <span>
+          <Icon name={icon} />
+        </span>
+        <strong>{label}</strong>
+      </Link>
+    );
+  }
 }
 
 function Metric({
+  href,
+  icon,
   label,
   value,
-  critical = false,
+  caption,
+  tone = 'blue',
+  wide = false,
 }: {
+  href: string;
+  icon: IconName;
   label: string;
   value: string | number;
-  critical?: boolean;
+  caption?: string;
+  tone?: 'blue' | 'warning' | 'success';
+  wide?: boolean;
 }) {
   return (
-    <article className={`metric ${critical ? 'metric--critical' : ''}`}>
+    <Link
+      href={href}
+      className={`metric metric--link metric--${tone}${wide ? ' metric--wide' : ''}`}
+    >
+      <span className="metric__icon">
+        <Icon name={icon} />
+      </span>
       <span>{label}</span>
       <strong>{value}</strong>
-    </article>
+      {caption && <small>{caption}</small>}
+    </Link>
   );
+}
+
+function FocusItem({value, label, href}: {value: number; label: string; href: string}) {
+  return (
+    <Link href={href}>
+      <strong>{value}</strong>
+      <span>{label}</span>
+      <b>→</b>
+    </Link>
+  );
+}
+
+function relativeTime(date: Date): string {
+  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (seconds < 45) return 'hace unos segundos';
+  const minutes = Math.floor(seconds / 60);
+  return `hace ${minutes} min`;
+}
+
+function priorityLabel(priority: ServiceRequest['priority']): string {
+  return {low: 'Baja', normal: 'Normal', high: 'Alta', urgent: 'Urgente'}[priority];
 }
