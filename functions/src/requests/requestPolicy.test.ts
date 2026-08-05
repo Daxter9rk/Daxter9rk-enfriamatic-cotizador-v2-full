@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {canTransitionRequest} from './requestPolicy';
+import {canTransitionRequest, hasValidReassignmentReason} from './requestPolicy';
 
 describe('request transition policy', () => {
   it('allows assigned work to advance for its operator', () => {
@@ -13,5 +13,14 @@ describe('request transition policy', () => {
     expect(canTransitionRequest('completed', 'in_progress', 'admin', false, false)).toBe(false);
     expect(canTransitionRequest('assigned', 'cancelled', 'admin', false, true)).toBe(true);
     expect(canTransitionRequest('assigned', 'cancelled', 'operator', true, true)).toBe(false);
+  });
+});
+
+describe('request assignment policy', () => {
+  it('requires a concrete reason only when changing an existing assignee', () => {
+    expect(hasValidReassignmentReason(null, 'operator', null)).toBe(true);
+    expect(hasValidReassignmentReason('operator', 'operator', null)).toBe(true);
+    expect(hasValidReassignmentReason('operator', 'other', 'no')).toBe(false);
+    expect(hasValidReassignmentReason('operator', 'other', 'Cobertura de zona')).toBe(true);
   });
 });

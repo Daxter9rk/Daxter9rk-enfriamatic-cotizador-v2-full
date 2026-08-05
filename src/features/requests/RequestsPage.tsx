@@ -2,8 +2,10 @@ import {useMemo, useState, type FormEvent} from 'react';
 import {Link, useLocation, useRoute, useSearch} from 'wouter';
 import {useAuth} from '../../app/providers/AuthProvider';
 import {Icon} from '../../components/Icon';
+import {FilterBar} from '../../components/FilterBar';
 import {Modal} from '../../components/Modal';
 import {PageHeader} from '../../components/PageHeader';
+import {SearchableSelect} from '../../components/SearchableSelect';
 import {StatePanel} from '../../components/StatePanel';
 import {useCollection} from '../../hooks/useCollection';
 import {useRealtimeCollection} from '../../hooks/useRealtimeCollection';
@@ -16,6 +18,7 @@ import {
   updateDocument,
 } from '../../services/firebase/data';
 import {formatDate} from '../../utils/format';
+import {requestRelationshipError, type RequestScope} from '../../utils/requestRelations';
 
 const statusLabels = {
   pending: 'Pendiente',
@@ -51,6 +54,13 @@ export function RequestsPage() {
   const equipment = useCollection<Equipment>('equipment', operatorAccess);
   const users = useCollection<UserProfile>('users', [], 100, profile?.role === 'admin');
   const [filter, setFilter] = useState(searchParams.get('status') ?? 'all');
+  const [requestSearch, setRequestSearch] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [responsibleFilter, setResponsibleFilter] = useState('all');
+  const [clientFilter, setClientFilter] = useState('all');
+  const [siteFilter, setSiteFilter] = useState('all');
+  const [fromDate, setFromDate] = useState('');
+  const [sort, setSort] = useState('newest');
   const [view, setView] = useState<'cards' | 'list' | 'table'>(
     () =>
       (localStorage.getItem('enfriamatic-view-requests') as 'cards' | 'list' | 'table') ?? 'cards',
@@ -58,14 +68,56 @@ export function RequestsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [action, setAction] = useState<'assign' | 'complete' | 'reopen' | 'cancel' | null>(null);
+  const [draftClientId, setDraftClientId] = useState('');
+  const [draftSiteId, setDraftSiteId] = useState('');
+  const [draftEquipmentId, setDraftEquipmentId] = useState('');
+  const [draftAssignee, setDraftAssignee] = useState('');
+  const [draftScope, setDraftScope] = useState<RequestScope>('site');
   const selected = requests.data.find((item) => item.id === routeParams?.requestId) ?? null;
   const creating = searchParams.get('new') === '1';
 
-  const visible = useMemo(
-    () =>
-      filter === 'all' ? requests.data : requests.data.filter((item) => item.status === filter),
-    [filter, requests.data],
-  );
+  const visible = useMemo(() => {
+    const term = requestSearch.trim().toLocaleLowerCase('es-MX');
+    const start = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : 0;
+    return requests.data
+      .filter((item) => {
+        const clientName = clients.data.find((client) => client.id === item.clientId)?.name ?? '';
+        const siteName = sites.data.find((site) => site.id === item.siteId)?.name ?? '';
+        const responsible = users.data.find((user) => user.uid === item.assignedTo);
+        return (
+          (filter === 'all' || item.status === filter) &&
+          (priorityFilter === 'all' || item.priority === priorityFilter) &&
+          (responsibleFilter === 'all' || item.assignedTo === responsibleFilter) &&
+          (clientFilter === 'all' || item.clientId === clientFilter) &&
+          (siteFilter === 'all' || item.siteId === siteFilter) &&
+          (!start || (item.updatedAt?.toMillis?.() ?? 0) >= start) &&
+          (!term ||
+            `${item.title} ${item.description} ${clientName} ${siteName} ${responsible?.displayName ?? ''}`
+              .toLocaleLowerCase('es-MX')
+              .includes(term))
+        );
+      })
+      .sort((left, right) => {
+        if (sort === 'oldest')
+          return (left.updatedAt?.toMillis?.() ?? 0) - (right.updatedAt?.toMillis?.() ?? 0);
+        if (sort === 'priority') return priorityRank(right.priority) - priorityRank(left.priority);
+        if (sort === 'az') return left.title.localeCompare(right.title, 'es-MX');
+        return (right.updatedAt?.toMillis?.() ?? 0) - (left.updatedAt?.toMillis?.() ?? 0);
+      });
+  }, [
+    clientFilter,
+    clients.data,
+    filter,
+    fromDate,
+    priorityFilter,
+    requestSearch,
+    requests.data,
+    responsibleFilter,
+    siteFilter,
+    sites.data,
+    sort,
+    users.data,
+  ]);
   const setSearchParams = (params: Record<string, string>) => {
     const query = new URLSearchParams(params).toString();
     navigate(`/requests${query ? `?${query}` : ''}`, {replace: true});
@@ -83,11 +135,20 @@ export function RequestsPage() {
         clientId: form.get('clientId'),
         siteId: form.get('siteId'),
         equipmentId: String(form.get('equipmentId') ?? '') || null,
+        scope: form.get('scope'),
         title: form.get('title'),
         description: form.get('description'),
         priority: form.get('priority'),
         assignedTo,
       });
+      const relationError = requestRelationshipError({
+        ...data,
+        equipmentId: data.equipmentId ?? null,
+        clients: clients.data,
+        sites: sites.data,
+        equipment: equipment.data,
+      });
+      if (relationError) throw new Error(relationError);
       await createDocument(
         'requests',
         {
@@ -177,7 +238,30 @@ export function RequestsPage() {
           ) : undefined
         }
       />
-      <section className="toolbar">
+      <FilterBar
+        search={requestSearch}
+        searchPlaceholder="Título, cliente, instalación o responsable…"
+        sort={sort}
+        sortOptions={[
+          {value: 'newest', label: 'Más recientes'},
+          {value: 'oldest', label: 'Más antiguas'},
+          {value: 'priority', label: 'Mayor prioridad'},
+          {value: 'az', label: 'A–Z'},
+        ]}
+        onSearch={setRequestSearch}
+        onSort={setSort}
+        onClear={() => {
+          setRequestSearch('');
+          setFilter('all');
+          setPriorityFilter('all');
+          setResponsibleFilter('all');
+          setClientFilter('all');
+          setSiteFilter('all');
+          setFromDate('');
+          setSort('newest');
+          navigate('/requests', {replace: true});
+        }}
+      >
         <label>
           Estado
           <select
@@ -200,9 +284,79 @@ export function RequestsPage() {
             ))}
           </select>
         </label>
+        <label>
+          Prioridad
+          <select
+            value={priorityFilter}
+            onChange={(event) => setPriorityFilter(event.target.value)}
+          >
+            <option value="all">Todas</option>
+            {Object.entries(priorityLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {profile?.role === 'admin' && (
+          <label>
+            Responsable
+            <select
+              value={responsibleFilter}
+              onChange={(event) => setResponsibleFilter(event.target.value)}
+            >
+              <option value="all">Todos</option>
+              {users.data
+                .filter((user) => user.status === 'active')
+                .map((user) => (
+                  <option key={user.uid} value={user.uid}>
+                    {user.displayName}
+                  </option>
+                ))}
+            </select>
+          </label>
+        )}
+        <label>
+          Cliente
+          <select
+            value={clientFilter}
+            onChange={(event) => {
+              setClientFilter(event.target.value);
+              setSiteFilter('all');
+            }}
+          >
+            <option value="all">Todos</option>
+            {clients.data.map((client) => (
+              <option key={client.id} value={client.id}>
+                {client.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Instalación
+          <select value={siteFilter} onChange={(event) => setSiteFilter(event.target.value)}>
+            <option value="all">Todas</option>
+            {sites.data
+              .filter((site) => clientFilter === 'all' || site.clientId === clientFilter)
+              .map((site) => (
+                <option key={site.id} value={site.id}>
+                  {site.name}
+                </option>
+              ))}
+          </select>
+        </label>
+        <label>
+          Desde
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(event) => setFromDate(event.target.value)}
+          />
+        </label>
         <ViewToggle view={view} setView={setView} />
         <span>{visible.length} resultados</span>
-      </section>
+      </FilterBar>
       {requests.error ? (
         <StatePanel kind="error" title="No fue posible cargar las solicitudes">
           <p>{requests.error}</p>
@@ -240,39 +394,83 @@ export function RequestsPage() {
       {creating && (
         <Modal title="Nueva solicitud" onClose={() => setSearchParams({})}>
           <form className="form-grid" onSubmit={(event) => void create(event)}>
-            <label>
-              Cliente
-              <select name="clientId" required>
-                <option value="">Selecciona</option>
-                {clients.data.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Instalación
-              <select name="siteId" required>
-                <option value="">Selecciona</option>
-                {sites.data.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Equipo
-              <select name="equipmentId">
-                <option value="">Sin equipo</option>
-                {equipment.data.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <SearchableSelect
+              name="clientId"
+              label="Cliente"
+              required
+              placeholder="Buscar cliente…"
+              value={draftClientId}
+              options={clients.data
+                .filter((item) => item.status === 'active')
+                .map((item) => ({value: item.id, label: item.name}))}
+              onChange={(value) => {
+                setDraftClientId(value);
+                setDraftSiteId('');
+                setDraftEquipmentId('');
+              }}
+            />
+            <SearchableSelect
+              name="siteId"
+              label="Instalación"
+              required
+              disabled={!draftClientId}
+              placeholder="Buscar instalación…"
+              value={draftSiteId}
+              options={sites.data
+                .filter((item) => item.status === 'active' && item.clientId === draftClientId)
+                .map((item) => ({value: item.id, label: item.name}))}
+              onChange={(value) => {
+                setDraftSiteId(value);
+                setDraftEquipmentId('');
+              }}
+            />
+            <fieldset className="field-wide request-scope">
+              <legend>Alcance de la solicitud</legend>
+              <label className="checkbox">
+                <input
+                  name="scope"
+                  type="radio"
+                  value="site"
+                  checked={draftScope === 'site'}
+                  onChange={() => {
+                    setDraftScope('site');
+                    setDraftEquipmentId('');
+                  }}
+                />
+                Instalación completa o diagnóstico general
+              </label>
+              <label className="checkbox">
+                <input
+                  name="scope"
+                  type="radio"
+                  value="equipment"
+                  checked={draftScope === 'equipment'}
+                  onChange={() => setDraftScope('equipment')}
+                />
+                Equipo específico
+              </label>
+            </fieldset>
+            <SearchableSelect
+              name="equipmentId"
+              label="Equipo"
+              required={draftScope === 'equipment'}
+              disabled={!draftSiteId || draftScope === 'site'}
+              placeholder="Buscar equipo…"
+              value={draftEquipmentId}
+              options={equipment.data
+                .filter(
+                  (item) =>
+                    item.status === 'active' &&
+                    item.clientId === draftClientId &&
+                    item.siteId === draftSiteId,
+                )
+                .map((item) => ({
+                  value: item.id,
+                  label: item.name,
+                  keywords: `${item.brand ?? ''} ${item.model ?? ''} ${item.serialNumber ?? ''}`,
+                }))}
+              onChange={setDraftEquipmentId}
+            />
             <label>
               Prioridad
               <select name="priority" defaultValue="normal">
@@ -291,13 +489,14 @@ export function RequestsPage() {
               Descripción
               <textarea name="description" required maxLength={4000} />
             </label>
-            <label className="field-wide">
-              Asignar a
-              <select name="assignedTo">
-                <option value="">Sin asignar</option>
-                <AssigneeOptions users={users.data} />
-              </select>
-            </label>
+            <SearchableSelect
+              name="assignedTo"
+              label="Responsable (opcional)"
+              placeholder="Buscar por nombre o correo…"
+              value={draftAssignee}
+              options={assigneeOptions(users.data)}
+              onChange={setDraftAssignee}
+            />
             {error && <p className="form-message form-message--error field-wide">{error}</p>}
             <button className="button button--primary field-wide" disabled={saving}>
               {saving ? 'Guardando…' : 'Crear solicitud'}
@@ -384,7 +583,7 @@ function RequestDetail({
             {profile.role === 'admin' &&
               ['pending', 'assigned', 'in_progress'].includes(request.status) && (
                 <button className="button button--secondary" onClick={() => setAction('assign')}>
-                  Asignar
+                  {request.assignedTo ? 'Reasignar solicitud' : 'Asignar responsable'}
                 </button>
               )}
           </div>
@@ -555,19 +754,7 @@ function RequestDetail({
             onSubmit={(event) => void (action === 'assign' ? assign(event) : submitAction(event))}
           >
             {action === 'assign' ? (
-              <>
-                <label className="field-wide">
-                  Responsable
-                  <select name="assignedTo" required defaultValue={request.assignedTo ?? ''}>
-                    <option value="">Selecciona</option>
-                    <AssigneeOptions users={users} />
-                  </select>
-                </label>
-                <label className="field-wide">
-                  Nota de asignación
-                  <input name="note" maxLength={500} />
-                </label>
-              </>
+              <AssignmentFields request={request} users={users} />
             ) : action === 'complete' ? (
               <>
                 <p className="field-wide">
@@ -645,28 +832,43 @@ function ViewToggle({
   );
 }
 
-function AssigneeOptions({users}: {users: UserProfile[]}) {
-  const active = users.filter((item) => item.status === 'active');
+function assigneeOptions(users: UserProfile[]) {
+  return users
+    .filter((item) => item.status === 'active')
+    .sort((left, right) => left.displayName.localeCompare(right.displayName, 'es-MX'))
+    .map((item) => ({
+      value: item.uid,
+      label: `${item.displayName} — ${item.role === 'admin' ? 'Administrador/a' : 'Operador/a'}`,
+      keywords: item.email,
+    }));
+}
+
+function AssignmentFields({request, users}: {request: ServiceRequest; users: UserProfile[]}) {
+  const [assignedTo, setAssignedTo] = useState(request.assignedTo ?? '');
   return (
     <>
-      <optgroup label="Operadores">
-        {active
-          .filter((item) => item.role === 'operator')
-          .map((item) => (
-            <option key={item.uid} value={item.uid}>
-              {item.displayName}
-            </option>
-          ))}
-      </optgroup>
-      <optgroup label="Administradores">
-        {active
-          .filter((item) => item.role === 'admin')
-          .map((item) => (
-            <option key={item.uid} value={item.uid}>
-              {item.displayName}
-            </option>
-          ))}
-      </optgroup>
+      <SearchableSelect
+        name="assignedTo"
+        label="Responsable"
+        required
+        placeholder="Buscar por nombre o correo…"
+        value={assignedTo}
+        options={assigneeOptions(users)}
+        onChange={setAssignedTo}
+      />
+      <label className="field-wide">
+        {request.assignedTo ? 'Motivo de reasignación' : 'Nota de asignación'}
+        <input
+          name="note"
+          required={Boolean(request.assignedTo && assignedTo !== request.assignedTo)}
+          minLength={request.assignedTo && assignedTo !== request.assignedTo ? 5 : undefined}
+          maxLength={500}
+        />
+      </label>
     </>
   );
+}
+
+function priorityRank(priority: ServiceRequest['priority']) {
+  return {low: 0, normal: 1, high: 2, urgent: 3}[priority];
 }

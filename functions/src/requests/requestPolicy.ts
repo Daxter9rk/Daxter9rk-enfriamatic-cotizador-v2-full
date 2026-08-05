@@ -19,3 +19,12 @@ export function canTransitionRequest(
   }
   return from === 'in_progress' && (role === 'admin' || assignedToActor);
 }
+
+export function hasValidReassignmentReason(
+  previousAssignee: unknown,
+  nextAssignee: string,
+  note: string | null | undefined,
+): boolean {
+  if (typeof previousAssignee !== 'string' || previousAssignee === nextAssignee) return true;
+  return Boolean(note && note.trim().length >= 5);
+}

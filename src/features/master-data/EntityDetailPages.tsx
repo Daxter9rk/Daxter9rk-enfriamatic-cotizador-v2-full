@@ -228,6 +228,8 @@ export function EquipmentDetailPage({equipmentId}: {equipmentId: string}) {
         partsRecommended: split('partsRecommended'),
         resultingStatus: form.get('resultingStatus'),
         notes: form.get('notes'),
+        responsibleName: profile.displayName,
+        responsibleRole: profile.role,
       });
       await createDocument('equipmentInterventions', input, profile.uid);
       setAdding(false);
@@ -253,6 +255,11 @@ export function EquipmentDetailPage({equipmentId}: {equipmentId: string}) {
             <button className="button button--primary" onClick={() => setAdding(true)}>
               Registrar intervención
             </button>
+            {profile?.role === 'admin' && (
+              <Link className="button button--secondary" href={`/equipment?edit=${equipmentId}`}>
+                Editar datos del equipo
+              </Link>
+            )}
           </div>
         }
       />
@@ -337,7 +344,9 @@ export function EquipmentDetailPage({equipmentId}: {equipmentId: string}) {
                     <dd>{item.partsRecommended.join(', ') || 'Ninguna'}</dd>
                   </div>
                 </dl>
-                <small>{formatDate(item.createdAt)}</small>
+                <small>
+                  {item.responsibleName || 'Responsable autorizado'} · {formatDate(item.createdAt)}
+                </small>
               </article>
             ))}
           </div>
@@ -398,6 +407,10 @@ export function EquipmentDetailPage({equipmentId}: {equipmentId: string}) {
               Observaciones
               <textarea name="notes" maxLength={2000} />
             </label>
+            <p className="form-message field-wide">
+              Los adjuntos permitidos se agregan en “Fotografías y documentos” y permanecen en el
+              expediente histórico del equipo.
+            </p>
             {error && <p className="form-message form-message--error field-wide">{error}</p>}
             <button className="button button--primary field-wide" disabled={saving}>
               {saving ? 'Guardando…' : 'Guardar intervención'}

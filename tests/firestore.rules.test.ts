@@ -43,6 +43,7 @@ beforeEach(async () => {
     const db = context.firestore();
     await Promise.all([
       setDoc(doc(db, 'users/admin'), profile('admin', 'admin')),
+      setDoc(doc(db, 'users/promoted-admin'), profile('promoted-admin', 'admin')),
       setDoc(doc(db, 'users/operator'), profile('operator', 'operator')),
       setDoc(doc(db, 'users/other'), profile('other', 'operator')),
       setDoc(doc(db, 'users/inactive'), profile('inactive', 'operator', 'inactive')),
@@ -225,6 +226,34 @@ describe('Firestore rules — ownership, scope, and known IDs', () => {
     await assertFails(getDoc(doc(operatorDb, 'settings/internalSecret')));
     await assertFails(getDocs(query(collection(operatorDb, 'settings'), limit(20))));
   });
+
+  it('allows both administrator profiles to update known settings and denies operators', async () => {
+    for (const uid of ['admin', 'promoted-admin']) {
+      const db = environment.authenticatedContext(uid).firestore();
+      await assertSucceeds(
+        updateDoc(doc(db, 'settings/companyProfile'), {
+          companyName: `Enfriamatic ${uid}`,
+          updatedAt: serverTimestamp(),
+          updatedBy: uid,
+        }),
+      );
+    }
+
+    const operatorDb = environment.authenticatedContext('operator').firestore();
+    await assertFails(
+      updateDoc(doc(operatorDb, 'settings/quoteDefaults'), {
+        validityDays: 30,
+        updatedAt: serverTimestamp(),
+        updatedBy: 'operator',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(operatorDb, 'settings/unknown'), {
+        value: true,
+        ...audit(),
+      }),
+    );
+  });
 });
 
 describe('Firestore rules — create, update, delete, and immutable fields', () => {
@@ -313,6 +342,95 @@ describe('Firestore rules — create, update, delete, and immutable fields', () 
       }),
     );
     await assertFails(deleteDoc(reference));
+  });
+
+  it('enforces active client, site, equipment, scope, and assignee relationships', async () => {
+    const db = environment.authenticatedContext('admin').firestore();
+    const base = {
+      ...serviceRequest(null, 'pending'),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      createdBy: 'admin',
+      updatedBy: 'admin',
+    };
+    await assertSucceeds(setDoc(doc(db, 'requests/general-scope'), base));
+    await assertSucceeds(
+      setDoc(doc(db, 'requests/equipment-scope'), {
+        ...base,
+        scope: 'equipment',
+        equipmentId: 'equipment',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(db, 'requests/cross-client'), {
+        ...base,
+        clientId: 'private',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(db, 'requests/missing-equipment'), {
+        ...base,
+        scope: 'equipment',
+        equipmentId: null,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(db, 'requests/inactive-assignee'), {
+        ...base,
+        status: 'assigned',
+        assignedTo: 'inactive',
+        assignedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('allows file metadata only to the expected admin/operator scope and supports cleanup', async () => {
+    const adminDb = environment.authenticatedContext('promoted-admin').firestore();
+    const operatorDb = environment.authenticatedContext('operator').firestore();
+    const siteFile = {
+      siteId: 'site',
+      type: 'photo',
+      storagePath: 'sites/site/site-file/site-file.png',
+      fileName: 'foto.png',
+      mimeType: 'image/png',
+      sizeBytes: 3,
+      description: '',
+      isPrimary: false,
+      status: 'pending',
+      createdAt: serverTimestamp(),
+      createdBy: 'promoted-admin',
+      updatedAt: serverTimestamp(),
+      updatedBy: 'promoted-admin',
+      schemaVersion: 1,
+    };
+    await assertSucceeds(setDoc(doc(adminDb, 'siteFiles/site-file'), siteFile));
+    await assertFails(
+      setDoc(doc(operatorDb, 'siteFiles/operator-site-file'), {
+        ...siteFile,
+        storagePath: 'sites/site/operator-site-file/operator-site-file.png',
+        createdBy: 'operator',
+        updatedBy: 'operator',
+      }),
+    );
+    await assertSucceeds(deleteDoc(doc(adminDb, 'siteFiles/site-file')));
+
+    const equipmentFile = {
+      equipmentId: 'equipment',
+      type: 'photo',
+      storagePath: 'equipment/equipment/equipment-file/equipment-file.png',
+      fileName: 'foto.png',
+      mimeType: 'image/png',
+      sizeBytes: 3,
+      description: '',
+      status: 'pending',
+      createdAt: serverTimestamp(),
+      createdBy: 'operator',
+      updatedAt: serverTimestamp(),
+      updatedBy: 'operator',
+      schemaVersion: 1,
+    };
+    await assertSucceeds(setDoc(doc(operatorDb, 'equipmentFiles/equipment-file'), equipmentFile));
+    await assertSucceeds(deleteDoc(doc(operatorDb, 'equipmentFiles/equipment-file')));
   });
 
   it('keeps completion, reopening, cancellation, and assignment history backend-owned', async () => {
@@ -584,6 +702,7 @@ function serviceRequest(
     clientId: 'authorized',
     siteId: 'site',
     equipmentId: null,
+    scope: 'site',
     title: 'Solicitud',
     description: 'Diagnóstico',
     priority: 'normal',

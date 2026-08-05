@@ -136,6 +136,8 @@ export interface EquipmentIntervention extends AuditFields {
   partsRecommended: string[];
   resultingStatus: 'operational' | 'limited' | 'out_of_service' | 'unknown';
   notes?: string;
+  responsibleName?: string;
+  responsibleRole?: UserRole;
 }
 
 export interface ServiceRequest extends AuditFields {
@@ -143,6 +145,7 @@ export interface ServiceRequest extends AuditFields {
   clientId: string;
   siteId: string;
   equipmentId?: string | null;
+  scope?: 'site' | 'equipment';
   title: string;
   description: string;
   priority: 'low' | 'normal' | 'high' | 'urgent';
@@ -193,6 +196,12 @@ export interface Quote extends AuditFields {
   revisionNumber: number;
   locked: boolean;
   commercialTransition?: QuoteCommercialTransition | null;
+  commercialHistory?: QuoteCommercialTransition[];
+  lastRejectionReason?: string | null;
+  lastRejectedAt?: Timestamp | null;
+  lastRejectedBy?: string | null;
+  lastRejectedByName?: string | null;
+  lastRejectedByRole?: UserRole | null;
 }
 
 export interface CatalogItem extends AuditFields {
@@ -233,6 +242,8 @@ export interface QuoteCommercialTransition {
   from: QuoteStatus;
   to: QuoteStatus;
   actorId: string;
+  actorName?: string;
+  actorRole?: UserRole;
   at: Timestamp;
   reason?: string | null;
 }
@@ -286,6 +297,7 @@ export interface AuditLog {
   before?: Record<string, unknown> | null;
   after?: Record<string, unknown> | null;
   metadata?: Record<string, unknown>;
+  result?: 'success' | 'denied' | 'failed';
   createdAt: Timestamp;
 }
 
@@ -297,7 +309,16 @@ export interface SupportRequest extends AuditFields {
   module: string;
   priority: 'low' | 'normal' | 'high' | 'urgent';
   appVersion: string;
-  status: 'open' | 'in_progress' | 'resolved' | 'closed';
+  status: 'open' | 'in_progress' | 'needs_information' | 'resolved' | 'closed';
+  blocked?: boolean;
+  route?: string;
+  browser?: string;
+  reporterRole?: UserRole;
+  attachmentStoragePath?: string | null;
+  attachmentFileName?: string | null;
+  attachmentMimeType?: string | null;
+  attachmentSizeBytes?: number | null;
+  attachmentStatus?: 'pending' | 'ready' | 'failed' | null;
 }
 
 export type AuthState =

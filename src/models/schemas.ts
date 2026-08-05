@@ -78,12 +78,15 @@ export const equipmentInterventionInputSchema = z.object({
   partsRecommended: z.array(z.string().trim().min(1).max(160)).max(50),
   resultingStatus: z.enum(['operational', 'limited', 'out_of_service', 'unknown']),
   notes: optionalText,
+  responsibleName: z.string().trim().min(1).max(120),
+  responsibleRole: z.enum(['admin', 'operator']),
 });
 
 export const requestInputSchema = z.object({
   clientId: z.string().trim().min(1).max(128),
   siteId: z.string().trim().min(1).max(128),
   equipmentId: z.string().trim().max(128).nullable().optional(),
+  scope: z.enum(['site', 'equipment']),
   title: shortText,
   description: z.string().trim().min(1).max(4000),
   priority: z.enum(['low', 'normal', 'high', 'urgent']),
@@ -159,6 +162,10 @@ export const supportRequestInputSchema = z.object({
   priority: z.enum(['low', 'normal', 'high', 'urgent']),
   appVersion: z.string().trim().min(1).max(40),
   status: z.literal('open'),
+  blocked: z.boolean(),
+  route: z.string().trim().min(1).max(300),
+  browser: z.string().trim().min(1).max(300),
+  reporterRole: z.enum(['admin', 'operator']),
 });
 
 export type ClientInput = z.infer<typeof clientInputSchema>;

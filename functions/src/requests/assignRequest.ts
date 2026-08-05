@@ -4,6 +4,7 @@ import {firestore} from '../shared/admin';
 import {requireActiveActor} from '../shared/auth';
 import {invalidArgument} from '../shared/errors';
 import {assignRequestSchema} from '../shared/schemas';
+import {hasValidReassignmentReason} from './requestPolicy';
 
 export const assignRequest = onCall(
   {region: 'us-central1', maxInstances: 10, enforceAppCheck: false},
@@ -31,6 +32,13 @@ export const assignRequest = onCall(
       ) {
         throw new HttpsError('failed-precondition', 'The assignee is not active or authorized.');
       }
+      const isReassignment = typeof data.assignedTo === 'string' && data.assignedTo !== assignedTo;
+      if (!hasValidReassignmentReason(data.assignedTo, assignedTo, note)) {
+        throw new HttpsError(
+          'invalid-argument',
+          'A reason of at least five characters is required for reassignment.',
+        );
+      }
       const now = FieldValue.serverTimestamp();
       transaction.update(requestRef, {
         assignedTo,
@@ -44,6 +52,20 @@ export const assignRequest = onCall(
         }),
         updatedAt: now,
         updatedBy: actor.uid,
+      });
+      transaction.set(firestore.collection('auditLogs').doc(), {
+        actorId: actor.uid,
+        actorRole: actor.role,
+        action: isReassignment ? 'request.reassigned' : 'request.assigned',
+        resourceType: 'request',
+        resourceId: requestId,
+        requestId,
+        quoteId: null,
+        before: {assignedTo: data.assignedTo ?? null},
+        after: {assignedTo},
+        metadata: {reason: note ?? null, result: 'success'},
+        result: 'success',
+        createdAt: now,
       });
       return {requestId, assignedTo};
     });

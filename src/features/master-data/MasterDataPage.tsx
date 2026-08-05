@@ -2,6 +2,7 @@ import {useEffect, useMemo, useState, type FormEvent} from 'react';
 import {Link, useLocation, useSearch} from 'wouter';
 import {useAuth} from '../../app/providers/AuthProvider';
 import {Modal} from '../../components/Modal';
+import {FilterBar} from '../../components/FilterBar';
 import {PageHeader} from '../../components/PageHeader';
 import {StatePanel} from '../../components/StatePanel';
 import {useCollection} from '../../hooks/useCollection';
@@ -47,6 +48,11 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
   const clients = useCollection<Client>('clients', operatorConstraints);
   const sites = useCollection<Site>('sites', operatorConstraints);
   const [search, setSearch] = useState('');
+  const [siteFilter, setSiteFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [brandFilter, setBrandFilter] = useState('all');
+  const [operationalFilter, setOperationalFilter] = useState('all');
+  const [sort, setSort] = useState('az');
   const [editing, setEditing] = useState<MasterRecord | 'new' | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -57,28 +63,61 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
   const labels = copy[kind];
 
   useEffect(() => {
-    if (new URLSearchParams(searchQuery).get('new') === '1' && profile?.role === 'admin')
+    const parameters = new URLSearchParams(searchQuery);
+    if (parameters.get('new') === '1' && profile?.role === 'admin') {
       setEditing('new');
-  }, [searchQuery, profile]);
+      return;
+    }
+    const editId = parameters.get('edit');
+    if (editId && profile?.role === 'admin') {
+      const record = records.data.find((item) => item.id === editId);
+      if (record) setEditing(record);
+    }
+  }, [records.data, searchQuery, profile]);
 
   const closeEditor = () => {
     setEditing(null);
-    if (new URLSearchParams(searchQuery).has('new')) navigate(`/${kind}`, {replace: true});
+    const parameters = new URLSearchParams(searchQuery);
+    if (parameters.has('new') || parameters.has('edit')) navigate(`/${kind}`, {replace: true});
   };
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return records.data;
-    return records.data.filter((record) => {
-      const searchable = [
-        record.name,
-        'category' in record ? record.category : '',
-        'brand' in record ? record.brand : '',
-        'serialNumber' in record ? record.serialNumber : '',
-      ];
-      return searchable.some((value) => value?.toLowerCase().includes(term));
-    });
-  }, [records.data, search]);
+    return records.data
+      .filter((record) => {
+        const unit = kind === 'equipment' ? (record as Equipment) : null;
+        const searchable = [
+          record.name,
+          'category' in record ? record.category : '',
+          'brand' in record ? record.brand : '',
+          'serialNumber' in record ? record.serialNumber : '',
+        ];
+        return (
+          (!term || searchable.some((value) => value?.toLowerCase().includes(term))) &&
+          (!unit || siteFilter === 'all' || unit.siteId === siteFilter) &&
+          (!unit || categoryFilter === 'all' || unit.category === categoryFilter) &&
+          (!unit || brandFilter === 'all' || unit.brand === brandFilter) &&
+          (!unit || operationalFilter === 'all' || unit.operationalStatus === operationalFilter)
+        );
+      })
+      .sort((left, right) => {
+        if (sort === 'za') return right.name.localeCompare(left.name, 'es-MX');
+        if (sort === 'newest')
+          return (right.updatedAt?.toMillis?.() ?? 0) - (left.updatedAt?.toMillis?.() ?? 0);
+        if (sort === 'oldest')
+          return (left.updatedAt?.toMillis?.() ?? 0) - (right.updatedAt?.toMillis?.() ?? 0);
+        return left.name.localeCompare(right.name, 'es-MX');
+      });
+  }, [
+    brandFilter,
+    categoryFilter,
+    kind,
+    operationalFilter,
+    records.data,
+    search,
+    siteFilter,
+    sort,
+  ]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -122,15 +161,92 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
           ) : undefined
         }
       />
-      <section className="toolbar" aria-label="Filtros">
-        <label className="search-field">
-          <span>Buscar</span>
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Nombre, categoría, marca…"
-          />
-        </label>
+      <FilterBar
+        search={search}
+        searchPlaceholder="Nombre, categoría, marca…"
+        sort={sort}
+        sortOptions={[
+          {value: 'az', label: 'A–Z'},
+          {value: 'za', label: 'Z–A'},
+          {value: 'newest', label: 'Más recientes'},
+          {value: 'oldest', label: 'Más antiguos'},
+        ]}
+        onSearch={setSearch}
+        onSort={setSort}
+        onClear={() => {
+          setSearch('');
+          setSiteFilter('all');
+          setCategoryFilter('all');
+          setBrandFilter('all');
+          setOperationalFilter('all');
+          setSort('az');
+        }}
+      >
+        {kind === 'equipment' && (
+          <>
+            <label>
+              Instalación
+              <select value={siteFilter} onChange={(event) => setSiteFilter(event.target.value)}>
+                <option value="all">Todas</option>
+                {sites.data.map((site) => (
+                  <option key={site.id} value={site.id}>
+                    {site.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Categoría
+              <select
+                value={categoryFilter}
+                onChange={(event) => setCategoryFilter(event.target.value)}
+              >
+                <option value="all">Todas</option>
+                {[
+                  ...new Set(
+                    records.data
+                      .filter((item): item is Equipment => 'category' in item)
+                      .map((item) => item.category),
+                  ),
+                ]
+                  .sort()
+                  .map((value) => (
+                    <option key={value}>{value}</option>
+                  ))}
+              </select>
+            </label>
+            <label>
+              Marca
+              <select value={brandFilter} onChange={(event) => setBrandFilter(event.target.value)}>
+                <option value="all">Todas</option>
+                {[
+                  ...new Set(
+                    records.data
+                      .filter((item): item is Equipment => 'brand' in item && Boolean(item.brand))
+                      .map((item) => item.brand!),
+                  ),
+                ]
+                  .sort()
+                  .map((value) => (
+                    <option key={value}>{value}</option>
+                  ))}
+              </select>
+            </label>
+            <label>
+              Estado operativo
+              <select
+                value={operationalFilter}
+                onChange={(event) => setOperationalFilter(event.target.value)}
+              >
+                <option value="all">Todos</option>
+                <option value="operational">Operativo</option>
+                <option value="limited">Limitado</option>
+                <option value="out_of_service">Fuera de servicio</option>
+                <option value="unknown">Sin confirmar</option>
+              </select>
+            </label>
+          </>
+        )}
         <div className="view-toggle" aria-label="Tipo de vista">
           {(['cards', 'list', 'table'] as const).map((option) => (
             <button
@@ -146,7 +262,7 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
           ))}
         </div>
         <span>{filtered.length} registros</span>
-      </section>
+      </FilterBar>
       {records.error ? (
         <StatePanel kind="error" title="No fue posible cargar los datos">
           <p>{records.error}</p>

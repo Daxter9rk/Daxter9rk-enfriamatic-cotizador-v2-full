@@ -328,7 +328,7 @@ service cloud.firestore {
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
         && data.keys().hasOnly([
-          'clientId', 'siteId', 'equipmentId', 'title', 'description',
+          'clientId', 'siteId', 'equipmentId', 'scope', 'title', 'description',
           'priority', 'status', 'assignedTo', 'assignedAt', 'completedAt',
           'finalNote', 'reopenedAt', 'reopenedBy', 'reopenReason',
           'cancellationReason', 'workNotes', 'assignmentHistory',
@@ -339,6 +339,7 @@ service cloud.firestore {
         && validString(data.clientId, 1, 128)
         && validString(data.siteId, 1, 128)
         && validNullableString(data, 'equipmentId', 128)
+        && (!(data.keys().hasAny(['scope'])) || data.scope in ['site', 'equipment'])
         && validString(data.title, 1, 120)
         && validString(data.description, 1, 4000)
         && data.priority in ['low', 'normal', 'high', 'urgent']
@@ -372,6 +373,48 @@ service cloud.firestore {
         || data.status in ['completed', 'cancelled'];
     }
 
+    function validRequestRelations(data) {
+      let linkedClient = get(
+        /databases/$(database)/documents/clients/$(data.clientId)
+      ).data;
+      let linkedSite = get(
+        /databases/$(database)/documents/sites/$(data.siteId)
+      ).data;
+      let linkedEquipment = get(
+        /databases/$(database)/documents/equipment/$(data.equipmentId)
+      ).data;
+      return exists(/databases/$(database)/documents/clients/$(data.clientId))
+        && exists(/databases/$(database)/documents/sites/$(data.siteId))
+        && linkedClient.status == 'active'
+        && linkedSite.status == 'active'
+        && linkedSite.clientId == data.clientId
+        && (
+          (data.scope == 'site' && data.equipmentId == null)
+          || (
+            data.scope == 'equipment'
+            && data.equipmentId is string
+            && exists(
+              /databases/$(database)/documents/equipment/$(data.equipmentId)
+            )
+            && linkedEquipment.status == 'active'
+            && linkedEquipment.clientId == data.clientId
+            && linkedEquipment.siteId == data.siteId
+          )
+        );
+    }
+
+    function validRequestAssignee(data) {
+      let linkedAssignee = get(
+        /databases/$(database)/documents/users/$(data.assignedTo)
+      ).data;
+      return data.assignedTo == null
+        || (
+          exists(/databases/$(database)/documents/users/$(data.assignedTo))
+          && linkedAssignee.status == 'active'
+          && linkedAssignee.role in ['admin', 'operator']
+        );
+    }
+
     match /requests/{requestId} {
       allow get: if isAdmin()
         || (isOperator() && resource.data.assignedTo == request.auth.uid);
@@ -382,6 +425,8 @@ service cloud.firestore {
       allow create: if isAdmin()
         && validRequest(request.resource.data)
         && validRequestAssignment(request.resource.data)
+        && validRequestRelations(request.resource.data)
+        && validRequestAssignee(request.resource.data)
         && !request.resource.data.keys().hasAny([
           'finalNote', 'reopenedAt', 'reopenedBy', 'reopenReason',
           'cancellationReason', 'assignmentHistory'
@@ -392,6 +437,8 @@ service cloud.firestore {
           && validRequestTransition(resource.data.status, request.resource.data.status)
           && request.resource.data.clientId == resource.data.clientId
           && request.resource.data.siteId == resource.data.siteId
+          && optionalFieldUnchanged(request.resource.data, 'equipmentId')
+          && optionalFieldUnchanged(request.resource.data, 'scope')
           && request.resource.data.createdBy == resource.data.createdBy
           && optionalFieldUnchanged(request.resource.data, 'assignmentHistory')
           && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
@@ -400,6 +447,7 @@ service cloud.firestore {
           ])
           && validRequest(request.resource.data)
           && validRequestAssignment(request.resource.data)
+          && validRequestAssignee(request.resource.data)
           && validUpdateAudit(request.resource.data)
         ) || (
           isOperator()
@@ -455,7 +503,10 @@ service cloud.firestore {
           'subtotalFinal', 'taxTotal', 'grandTotal', 'notes', 'validityDays',
           'validUntil', 'issuedAt', 'issuedBy', 'originalQuoteId',
           'revisionNumber', 'locked', 'issuanceKey',
-          'commercialTransition', 'dataOrigin', 'seedVersion', 'seedTag',
+          'commercialTransition', 'commercialHistory',
+          'lastRejectionReason', 'lastRejectedAt', 'lastRejectedBy',
+          'lastRejectedByName', 'lastRejectedByRole',
+          'dataOrigin', 'seedVersion', 'seedTag',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
         && validString(data.folio, 0, 32)
@@ -485,6 +536,15 @@ service cloud.firestore {
         && data.revisionNumber >= 1 && data.revisionNumber <= 1000
         && data.locked is bool
         && validOptionalString(data, 'issuanceKey', 64)
+        && (!(data.keys().hasAny(['commercialHistory']))
+          || (data.commercialHistory is list && data.commercialHistory.size() <= 100))
+        && validNullableString(data, 'lastRejectionReason', 1000)
+        && validNullableTimestamp(data, 'lastRejectedAt')
+        && validNullableString(data, 'lastRejectedBy', 128)
+        && validNullableString(data, 'lastRejectedByName', 120)
+        && (!(data.keys().hasAny(['lastRejectedByRole']))
+          || data.lastRejectedByRole == null
+          || data.lastRejectedByRole in ['admin', 'operator'])
         && validSeedMetadata(data);
     }
 
@@ -531,7 +591,11 @@ service cloud.firestore {
         && data.originalQuoteId == null
         && data.revisionNumber == 1
         && !('issuanceKey' in data)
-        && !('commercialTransition' in data);
+        && !data.keys().hasAny([
+          'commercialTransition', 'commercialHistory', 'lastRejectionReason',
+          'lastRejectedAt', 'lastRejectedBy', 'lastRejectedByName',
+          'lastRejectedByRole'
+        ]);
     }
 
     match /quotes/{quoteId} {
@@ -563,7 +627,9 @@ service cloud.firestore {
           'folio', 'requestId', 'assignedTo', 'clientId', 'siteId',
           'equipmentId', 'createdAt', 'createdBy', 'schemaVersion',
           'originalQuoteId', 'revisionNumber', 'issuanceKey',
-          'issuedAt', 'issuedBy', 'validUntil', 'commercialTransition'
+          'issuedAt', 'issuedBy', 'validUntil', 'commercialTransition',
+          'commercialHistory', 'lastRejectionReason', 'lastRejectedAt',
+          'lastRejectedBy', 'lastRejectedByName', 'lastRejectedByRole'
         ])
         && validMutableQuote(request.resource.data)
         && validUpdateAudit(request.resource.data);
@@ -913,7 +979,7 @@ service cloud.firestore {
     match /siteFiles/{fileId} {
       allow get: if isActiveUser() && canReadSite(resource.data.siteId);
       allow list: if isActiveUser() && canReadSite(resource.data.siteId) && boundedList(50);
-      allow create: if isActiveUser()
+      allow create: if isAdmin()
         && validSiteFile(request.resource.data, fileId)
         && canReadSite(request.resource.data.siteId)
         && request.resource.data.status == 'pending'
@@ -935,7 +1001,9 @@ service cloud.firestore {
               'status', 'isPrimary', 'updatedAt', 'updatedBy'
             ]))
         );
-      allow delete: if false;
+      allow delete: if isAdmin()
+        && resource.data.isPrimary == false
+        && canReadSite(resource.data.siteId);
     }
 
     function validEquipmentFile(data, fileId) {
@@ -968,7 +1036,9 @@ service cloud.firestore {
         ])
         && canReadEquipment(resource.data.equipmentId)
         && validUpdateAudit(request.resource.data);
-      allow delete: if false;
+      allow delete: if isActiveUser()
+        && canReadEquipment(resource.data.equipmentId)
+        && (isAdmin() || resource.data.createdBy == request.auth.uid);
     }
 
     function validIntervention(data) {
@@ -980,6 +1050,7 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'equipmentId', 'siteId', 'requestId', 'interventionType', 'diagnosis',
           'actions', 'partsUsed', 'partsRecommended', 'resultingStatus', 'notes',
+          'responsibleName', 'responsibleRole',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
         && validString(data.equipmentId, 1, 128)
@@ -991,7 +1062,10 @@ service cloud.firestore {
         && data.partsUsed is list && data.partsUsed.size() <= 50
         && data.partsRecommended is list && data.partsRecommended.size() <= 50
         && data.resultingStatus in ['operational', 'limited', 'out_of_service', 'unknown']
-        && validOptionalString(data, 'notes', 2000);
+        && validOptionalString(data, 'notes', 2000)
+        && validOptionalString(data, 'responsibleName', 120)
+        && (!(data.keys().hasAny(['responsibleRole']))
+          || data.responsibleRole in ['admin', 'operator']);
     }
 
     match /equipmentInterventions/{interventionId} {
@@ -1010,7 +1084,9 @@ service cloud.firestore {
     function validSupportRequest(data) {
       return data.keys().hasAll([
           'category', 'subject', 'description', 'module', 'priority',
-          'appVersion', 'status',
+          'appVersion', 'status', 'blocked', 'route', 'browser', 'reporterRole',
+          'attachmentStoragePath', 'attachmentFileName', 'attachmentMimeType',
+          'attachmentSizeBytes', 'attachmentStatus',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
         && data.keys().hasOnly([
@@ -1024,7 +1100,25 @@ service cloud.firestore {
         && validString(data.module, 1, 80)
         && data.priority in ['low', 'normal', 'high', 'urgent']
         && validString(data.appVersion, 1, 40)
-        && data.status in ['open', 'in_progress', 'resolved', 'closed'];
+        && data.status in ['open', 'in_progress', 'needs_information', 'resolved', 'closed']
+        && (!(data.keys().hasAny(['blocked'])) || data.blocked is bool)
+        && validOptionalString(data, 'route', 300)
+        && validOptionalString(data, 'browser', 300)
+        && (!(data.keys().hasAny(['reporterRole'])) || data.reporterRole in ['admin', 'operator'])
+        && validNullableString(data, 'attachmentStoragePath', 500)
+        && validNullableString(data, 'attachmentFileName', 160)
+        && validNullableString(data, 'attachmentMimeType', 80)
+        && (!(data.keys().hasAny(['attachmentSizeBytes']))
+          || data.attachmentSizeBytes == null
+          || (data.attachmentSizeBytes is int
+            && data.attachmentSizeBytes > 0
+            && data.attachmentSizeBytes <= 5242880))
+        && (!(data.keys().hasAny(['attachmentStatus']))
+          || data.attachmentStatus == null
+          || data.attachmentStatus in ['pending', 'ready', 'failed'])
+        && (!(data.keys().hasAny(['attachmentMimeType']))
+          || data.attachmentMimeType == null
+          || data.attachmentMimeType in ['image/jpeg', 'image/png', 'image/webp']);
     }
 
     match /supportRequests/{supportId} {
@@ -1038,13 +1132,20 @@ service cloud.firestore {
         && validSupportRequest(request.resource.data)
         && request.resource.data.status == 'open'
         && validCreateAudit(request.resource.data);
-      allow update: if isAdmin()
-        && validSupportRequest(request.resource.data)
+      allow update: if validSupportRequest(request.resource.data)
         && request.resource.data.createdBy == resource.data.createdBy
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status', 'updatedAt', 'updatedBy'
-        ])
-        && validUpdateAudit(request.resource.data);
+        && validUpdateAudit(request.resource.data)
+        && (
+          (isAdmin()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'updatedAt', 'updatedBy'
+            ]))
+          || (isActiveUser()
+            && resource.data.createdBy == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'attachmentStatus', 'updatedAt', 'updatedBy'
+            ]))
+        );
       allow delete: if false;
     }
 
