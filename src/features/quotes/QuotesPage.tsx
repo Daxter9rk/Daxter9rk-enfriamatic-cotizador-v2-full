@@ -1,5 +1,5 @@
 import {useEffect, useMemo, useState, type FormEvent} from 'react';
-import {Link, useSearch} from 'wouter';
+import {Link, useLocation, useSearch} from 'wouter';
 import {useAuth} from '../../app/providers/AuthProvider';
 import {Modal} from '../../components/Modal';
 import {FilterBar} from '../../components/FilterBar';
@@ -18,11 +18,17 @@ import type {
 } from '../../models/domain';
 import {constraints, createDocument, getDocument} from '../../services/firebase/data';
 import {formatCurrency, formatDate} from '../../utils/format';
+import {
+  closeDetailSearch,
+  detailIdFromSearch,
+  openDetailSearch,
+} from '../../utils/detailNavigation';
 import {QuoteEditor} from './QuoteEditor';
 
 export function QuotesPage() {
   const {profile} = useAuth();
   const search = useSearch();
+  const [, navigate] = useLocation();
   const operatorFilter = profile?.role === 'operator' ? [constraints.assignedTo(profile.uid)] : [];
   const masterDataFilter =
     profile?.role === 'operator' ? [constraints.authorizedFor(profile.uid)] : [];
@@ -49,15 +55,27 @@ export function QuotesPage() {
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const quoteId = new URLSearchParams(search).get('quote');
-    if (quoteId && !selected) {
+    const quoteId = detailIdFromSearch(search, 'quote');
+    if (quoteId && selected?.id !== quoteId) {
       const target = quotes.data.find((quote) => quote.id === quoteId);
       if (target) setSelected(target);
       else if (!quotes.loading) {
         setMessage('La cotización no existe o no tienes permiso para consultarla.');
       }
     }
+    if (!quoteId && selected) setSelected(null);
   }, [quotes.data, quotes.loading, search, selected]);
+
+  const openQuote = (quote: Quote) => {
+    setMessage(null);
+    setSelected(quote);
+    navigate(`/quotes${openDetailSearch(search, 'quote', quote.id)}`);
+  };
+
+  const closeQuote = () => {
+    navigate(`/quotes${closeDetailSearch(search, 'quote')}`, {replace: true});
+    setSelected(null);
+  };
 
   const validRequests = requests.data.filter((request) =>
     ['assigned', 'in_progress'].includes(request.status),
@@ -137,7 +155,7 @@ export function QuotesPage() {
       setCreating(false);
       await quotes.reload();
       const created = await getDocument<Quote>('quotes', id);
-      if (created) setSelected(created);
+      if (created) openQuote(created);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo crear la cotización.');
     } finally {
@@ -274,7 +292,7 @@ export function QuotesPage() {
             <button
               className="record-card record-card--button"
               key={quote.id}
-              onClick={() => setSelected(quote)}
+              onClick={() => openQuote(quote)}
               data-testid={`quote-${quote.id}`}
             >
               <div className="record-card__top">
@@ -329,7 +347,7 @@ export function QuotesPage() {
           client={clients.data.find((client) => client.id === selected.clientId)}
           site={sites.data.find((site) => site.id === selected.siteId)}
           equipment={equipment.data.find((item) => item.id === selected.equipmentId)}
-          onClose={() => setSelected(null)}
+          onClose={closeQuote}
           onChanged={async () => {
             await quotes.reload();
             setSelected(await getDocument<Quote>('quotes', selected.id));

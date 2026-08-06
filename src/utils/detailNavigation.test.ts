@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {closeDetailSearch, detailIdFromSearch} from './detailNavigation';
+import {closeDetailSearch, detailIdFromSearch, openDetailSearch} from './detailNavigation';
 
 describe('navegación de detalle', () => {
   it('elimina sólo el detalle y conserva filtros al cerrar', () => {
@@ -12,5 +12,11 @@ describe('navegación de detalle', () => {
   it('normaliza una ruta sin detalle sin crear ciclos', () => {
     expect(closeDetailSearch('?status=issued', 'quote')).toBe('?status=issued');
     expect(detailIdFromSearch('?quote=', 'quote')).toBeNull();
+  });
+
+  it('abre un detalle conservando el resto del estado de la URL', () => {
+    expect(openDetailSearch('?status=issued&view=table', 'quote', 'q-2')).toBe(
+      '?status=issued&view=table&quote=q-2',
+    );
   });
 });
