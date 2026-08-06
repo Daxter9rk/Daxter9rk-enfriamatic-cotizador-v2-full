@@ -7,8 +7,8 @@ import {useCollection} from '../../hooks/useCollection';
 import type {EquipmentFile, SiteFile} from '../../models/domain';
 import {
   constraints,
+  createKnownDocument,
   deleteDocument,
-  setKnownDocument,
   updateDocument,
 } from '../../services/firebase/data';
 import {storage} from '../../services/firebase/config';
@@ -50,8 +50,9 @@ export function FileManager({
     const form = new FormData(event.currentTarget);
     const file = form.get('file');
     if (!(file instanceof File) || file.size === 0) return setMessage('Selecciona un archivo.');
+    const type = String(form.get('type'));
     try {
-      validatePrivateFile(file, entityType);
+      validatePrivateFile(file, entityType, type);
     } catch (error) {
       reportFileDiagnostic({
         stage: 'validation',
@@ -66,13 +67,12 @@ export function FileManager({
     setMessage(null);
     const fileId = crypto.randomUUID();
     const storagePath = buildPrivateStoragePath(entityType, entityId, fileId, file.type);
-    const type = String(form.get('type'));
     try {
       await runCompensatedUpload({
         resourceType: entityType,
         resourceId: entityId,
         createMetadata: () =>
-          setKnownDocument(
+          createKnownDocument(
             collectionName,
             fileId,
             {
@@ -103,7 +103,7 @@ export function FileManager({
       setMessage(
         error instanceof Error
           ? error.message
-          : 'No fue posible subir el archivo. Verifica tus permisos e inténtalo de nuevo.',
+          : 'No fue posible subir el archivo. Vuelve a intentarlo.',
       );
     } finally {
       setUploading(false);

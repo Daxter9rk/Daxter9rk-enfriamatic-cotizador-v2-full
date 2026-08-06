@@ -54,7 +54,11 @@ export function sanitizeVisibleFileName(name: string): string {
   return (cleaned || 'archivo').slice(0, 160);
 }
 
-export function validatePrivateFile(file: File, resourceType: PrivateFileResource): void {
+export function validatePrivateFile(
+  file: File,
+  resourceType: PrivateFileResource,
+  category?: string,
+): void {
   const specification = PRIVATE_FILE_LIMITS[resourceType];
   const extension = file.name.split('.').pop()?.toLocaleLowerCase('en-US') ?? '';
   const allowedExtensions = extensionsByMime[file.type] ?? [];
@@ -68,6 +72,13 @@ export function validatePrivateFile(file: File, resourceType: PrivateFileResourc
   }
   if (!allowedExtensions.includes(extension)) {
     throw new Error('La extensión del archivo no coincide con su tipo permitido.');
+  }
+  if (
+    file.type === 'application/pdf' &&
+    category !== undefined &&
+    !['document', 'plan', 'sketch'].includes(category)
+  ) {
+    throw new Error('El formato PDF sólo se permite como documento, plano o croquis.');
   }
   if (file.size > specification.maxBytes) {
     throw new Error(`El archivo supera el límite de ${specification.maxBytes / 1024 / 1024} MB.`);
@@ -101,7 +112,7 @@ export function normalizeFirebaseErrorCode(error: unknown): string {
 
 export function reportFileDiagnostic(diagnostic: FileDiagnostic): void {
   // Deliberately bounded: no File, payload, URL, token, credential or user-provided name.
-  console.error('private-file-operation', diagnostic);
+  console.warn('private-file-operation', diagnostic);
 }
 
 export async function runCompensatedUpload(input: {
@@ -162,10 +173,10 @@ export async function runCompensatedUpload(input: {
     }
     throw new PrivateFileError(
       stage === 'storage-upload'
-        ? 'No fue posible almacenar el archivo. Verifica tus permisos e inténtalo de nuevo.'
+        ? 'No fue posible almacenar el archivo. Vuelve a intentarlo.'
         : stage === 'metadata-create'
-          ? 'No fue posible preparar el archivo. Verifica tus permisos e inténtalo de nuevo.'
-          : 'No fue posible vincular el archivo; se intentó limpiar la carga incompleta.',
+          ? 'No fue posible preparar el archivo. Vuelve a intentarlo.'
+          : 'No fue posible vincular el archivo. Vuelve a intentarlo.',
       diagnostic,
     );
   }

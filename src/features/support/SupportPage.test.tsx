@@ -13,7 +13,7 @@ vi.mock('../../services/firebase/data', () => ({
   constraints: {createdBy: vi.fn()},
   createDocument: vi.fn(),
   reserveDocumentId: vi.fn(),
-  setKnownDocument: vi.fn(),
+  createKnownDocument: vi.fn(),
   updateDocument: vi.fn(),
 }));
 

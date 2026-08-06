@@ -14,6 +14,12 @@ describe('private file policy', () => {
   it('accepts matching image/PDF pairs and rejects active or mismatched content', () => {
     expect(() => validatePrivateFile(file('foto.jpeg', 'image/jpeg'), 'equipment')).not.toThrow();
     expect(() => validatePrivateFile(file('plano.pdf', 'application/pdf'), 'site')).not.toThrow();
+    expect(() =>
+      validatePrivateFile(file('foto.pdf', 'application/pdf'), 'equipment', 'photo'),
+    ).toThrow(/sólo se permite/);
+    expect(() =>
+      validatePrivateFile(file('documento.pdf', 'application/pdf'), 'equipment', 'document'),
+    ).not.toThrow();
     expect(() => validatePrivateFile(file('vector.svg', 'image/svg+xml'), 'catalog')).toThrow(
       /Formato no permitido/,
     );

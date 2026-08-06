@@ -139,6 +139,22 @@ export async function setKnownDocument(
   );
 }
 
+export async function createKnownDocument(
+  collectionName: DomainCollection,
+  id: string,
+  data: DocumentData,
+  actorId: string,
+): Promise<void> {
+  await setDoc(doc(db, collectionName, id), {
+    ...data,
+    createdAt: serverTimestamp(),
+    createdBy: actorId,
+    updatedAt: serverTimestamp(),
+    updatedBy: actorId,
+    schemaVersion: 1,
+  });
+}
+
 export async function saveQuoteItem(
   quoteId: string,
   itemId: string | null,

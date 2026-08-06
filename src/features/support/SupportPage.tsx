@@ -8,9 +8,9 @@ import type {SupportRequest} from '../../models/domain';
 import {supportRequestInputSchema} from '../../models/schemas';
 import {
   constraints,
+  createKnownDocument,
   createDocument,
   reserveDocumentId,
-  setKnownDocument,
   updateDocument,
 } from '../../services/firebase/data';
 import {storage} from '../../services/firebase/config';
@@ -81,7 +81,7 @@ export function SupportPage() {
           resourceType: 'support',
           resourceId: supportId,
           createMetadata: () =>
-            setKnownDocument(
+            createKnownDocument(
               'supportRequests',
               supportId,
               {
