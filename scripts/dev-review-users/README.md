@@ -12,3 +12,11 @@ npm.cmd run review-users:dev -- --target=remote --action=provision --confirm-pro
 `disable` deshabilita en Auth las cuentas registradas y pone inactivos sus perfiles; `restore` vuelve a habilitarlas y restaura los roles/estados de revisión; `cleanup` elimina únicamente UIDs presentes en el registro local y que además llevan la custom claim `devReviewUser`. Para remoto se requieren Application Default Credentials. El archivo local de UIDs no contiene credenciales y está ignorado por Git.
 
 El script nunca busca, modifica ni elimina al administrador principal. Si un correo ya pertenece a una cuenta no marcada por el script, se detiene.
+
+Para verificar el ciclo completo sin credenciales persistentes, inicia Auth y Firestore Emulator mediante:
+
+```powershell
+firebase.cmd emulators:exec --project enfriamatic-cotizador-de-420e5 --only auth,firestore "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-review-users/verify-emulator.ps1"
+```
+
+La verificación genera una contraseña aleatoria sólo en memoria, prueba `provision`, `disable`, `restore` y `cleanup`, y no muestra el valor.
