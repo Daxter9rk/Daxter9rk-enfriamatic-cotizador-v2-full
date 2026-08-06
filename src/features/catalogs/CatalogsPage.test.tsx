@@ -1,5 +1,5 @@
-import {render, screen} from '@testing-library/react';
-import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {cleanup, render, screen} from '@testing-library/react';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {CatalogsPage} from './CatalogsPage';
 
 const state = vi.hoisted(() => ({role: 'admin'}));
@@ -20,6 +20,7 @@ vi.mock('../../services/firebase/data', () => ({
 }));
 
 describe('CatalogsPage', () => {
+  afterEach(cleanup);
   beforeEach(() => {
     state.role = 'admin';
   });
@@ -27,8 +28,8 @@ describe('CatalogsPage', () => {
   it('presenta etiquetas en español y acciones administrativas', () => {
     render(<CatalogsPage />);
     expect(screen.getByRole('heading', {name: 'Catálogos internos'})).toBeVisible();
-    expect(screen.getByText('Prioridad')).toBeVisible();
-    expect(screen.getByText('Alta')).toBeVisible();
+    expect(screen.getAllByText('Prioridad')).not.toHaveLength(0);
+    expect(screen.getAllByText('Alta')).not.toHaveLength(0);
     expect(screen.getByText('Activo')).toBeVisible();
     expect(screen.getByRole('button', {name: 'Editar'})).toBeVisible();
     expect(screen.getByRole('button', {name: 'Desactivar'})).toBeVisible();

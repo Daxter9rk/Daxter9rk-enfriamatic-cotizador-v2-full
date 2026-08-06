@@ -864,6 +864,7 @@ service cloud.firestore {
         && validCreateAudit(request.resource.data);
       allow update: if isAdmin()
         && validCatalog(request.resource.data)
+        && request.resource.data.type == resource.data.type
         && validUpdateAudit(request.resource.data);
       allow delete: if false;
     }
@@ -1084,14 +1085,14 @@ service cloud.firestore {
     function validSupportRequest(data) {
       return data.keys().hasAll([
           'category', 'subject', 'description', 'module', 'priority',
-          'appVersion', 'status', 'blocked', 'route', 'browser', 'reporterRole',
-          'attachmentStoragePath', 'attachmentFileName', 'attachmentMimeType',
-          'attachmentSizeBytes', 'attachmentStatus',
+          'appVersion', 'status',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
         && data.keys().hasOnly([
           'category', 'subject', 'description', 'module', 'priority',
-          'appVersion', 'status',
+          'appVersion', 'status', 'blocked', 'route', 'browser', 'reporterRole',
+          'attachmentStoragePath', 'attachmentFileName', 'attachmentMimeType',
+          'attachmentSizeBytes', 'attachmentStatus',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
         && data.category in ['technical', 'access', 'data', 'question']

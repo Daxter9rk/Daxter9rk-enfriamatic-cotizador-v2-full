@@ -20,6 +20,7 @@ const operationalLinks: NavigationItem[] = [
   {href: '/quotes', label: 'Cotizaciones', icon: 'quote'},
   {href: '/commercial-catalog', label: 'Catálogo comercial', icon: 'catalog'},
   {href: '/activity', label: 'Actividad', icon: 'activity'},
+  {href: '/catalogs', label: 'Catálogos internos', icon: 'catalog'},
 ];
 
 const helpLinks: NavigationItem[] = [
@@ -30,7 +31,6 @@ const helpLinks: NavigationItem[] = [
 const adminLinks: NavigationItem[] = [
   {href: '/settings', label: 'Configuración', icon: 'settings'},
   {href: '/users', label: 'Usuarios y permisos', icon: 'users'},
-  {href: '/catalogs', label: 'Catálogos internos', icon: 'catalog'},
 ];
 
 export function AppShell({children}: {children: ReactNode}) {

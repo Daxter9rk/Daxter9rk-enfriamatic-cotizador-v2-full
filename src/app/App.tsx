@@ -117,7 +117,7 @@ export function App() {
             {profile?.role === 'admin' ? <UsersPage /> : <Redirect to="/" replace />}
           </Route>
           <Route path="/catalogs">
-            {profile?.role === 'admin' ? <CatalogsPage /> : <Redirect to="/" replace />}
+            <CatalogsPage />
           </Route>
           <Route path="/settings">
             {profile?.role === 'admin' ? <SettingsPage /> : <Redirect to="/" replace />}

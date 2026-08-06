@@ -61,6 +61,7 @@ beforeEach(async () => {
       setDoc(doc(db, 'quotes/other-draft'), quote('other', 'draft', false, 'other')),
       setDoc(doc(db, 'catalogItems/PROD-ACTIVE'), catalogItem('PROD-ACTIVE', 'active')),
       setDoc(doc(db, 'catalogItems/PROD-INACTIVE'), catalogItem('PROD-INACTIVE', 'inactive')),
+      setDoc(doc(db, 'catalogs/priority-high'), internalCatalog('priority', 'Alta', 'high')),
       setDoc(doc(db, 'settings/companyProfile'), companyProfile()),
       setDoc(doc(db, 'settings/quoteDefaults'), quoteDefaults()),
       setDoc(doc(db, 'settings/internalSecret'), {secret: 'backend-only'}),
@@ -144,6 +145,56 @@ describe('Firestore rules — commercial catalog', () => {
         updatedAt: serverTimestamp(),
       }),
     );
+  });
+});
+
+describe('Firestore rules — internal catalogs', () => {
+  it('allows active operators to read but never mutate internal catalogs', async () => {
+    const db = environment.authenticatedContext('operator').firestore();
+    await assertSucceeds(getDoc(doc(db, 'catalogs/priority-high')));
+    await assertSucceeds(getDocs(query(collection(db, 'catalogs'), limit(100))));
+    await assertFails(
+      updateDoc(doc(db, 'catalogs/priority-high'), {
+        status: 'inactive',
+        updatedAt: serverTimestamp(),
+        updatedBy: 'operator',
+      }),
+    );
+  });
+
+  it('lets admins create, edit, activate and deactivate without changing the reserved type', async () => {
+    const db = environment.authenticatedContext('admin').firestore();
+    const reference = doc(db, 'catalogs/site-type-store');
+    await assertSucceeds(
+      setDoc(reference, {
+        ...internalCatalog('site_type', 'Tienda', 'store'),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      updateDoc(reference, {
+        name: 'Sucursal comercial',
+        status: 'inactive',
+        updatedAt: serverTimestamp(),
+        updatedBy: 'admin',
+      }),
+    );
+    await assertSucceeds(
+      updateDoc(reference, {
+        status: 'active',
+        updatedAt: serverTimestamp(),
+        updatedBy: 'admin',
+      }),
+    );
+    await assertFails(
+      updateDoc(reference, {
+        type: 'priority',
+        updatedAt: serverTimestamp(),
+        updatedBy: 'admin',
+      }),
+    );
+    await assertFails(deleteDoc(reference));
   });
 });
 
@@ -653,6 +704,10 @@ function audit() {
     updatedBy: 'admin',
     schemaVersion: 1,
   };
+}
+
+function internalCatalog(type: string, name: string, value: string) {
+  return {type, name, value, status: 'active', ...audit()};
 }
 
 function client(operatorIds: string[]) {
