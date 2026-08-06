@@ -289,7 +289,12 @@ export interface AuditLog {
   id: string;
   actorId: string;
   actorRole: UserRole;
+  actorUid?: string;
+  actorDisplayNameSnapshot?: string | null;
+  actorRoleSnapshot?: UserRole | null;
   action: string;
+  eventCode?: string;
+  sourceEventId?: string;
   resourceType: string;
   resourceId: string;
   requestId?: string | null;
@@ -298,6 +303,11 @@ export interface AuditLog {
   after?: Record<string, unknown> | null;
   metadata?: Record<string, unknown>;
   result?: 'success' | 'denied' | 'failed';
+  resourceLabelSnapshot?: string | null;
+  route?: string | null;
+  reason?: string | null;
+  occurredAt?: Timestamp;
+  schemaVersion?: number;
   createdAt: Timestamp;
 }
 

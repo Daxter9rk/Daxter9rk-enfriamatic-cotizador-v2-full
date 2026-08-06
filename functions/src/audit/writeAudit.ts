@@ -29,7 +29,10 @@ function sanitize(
 export async function writeAudit(actor: ActiveActor, input: AuditInput): Promise<void> {
   await firestore.collection('auditLogs').add({
     actorId: actor.uid,
+    actorUid: actor.uid,
+    actorDisplayNameSnapshot: actor.displayName || actor.email,
     actorRole: actor.role,
+    actorRoleSnapshot: actor.role,
     action: input.action,
     resourceType: input.resourceType,
     resourceId: input.resourceId,
@@ -38,6 +41,9 @@ export async function writeAudit(actor: ActiveActor, input: AuditInput): Promise
     before: sanitize(input.before),
     after: sanitize(input.after),
     metadata: input.metadata ?? {},
+    result: 'success',
+    reason: typeof input.metadata?.reason === 'string' ? input.metadata.reason : null,
+    schemaVersion: 1,
     createdAt: FieldValue.serverTimestamp(),
   });
 }

@@ -8,36 +8,12 @@ import {useCollection} from '../../hooks/useCollection';
 import type {AuditLog, UserProfile} from '../../models/domain';
 import {constraints} from '../../services/firebase/data';
 import {formatDate} from '../../utils/format';
-
-const actionLabels: Record<string, string> = {
-  'requests.created': 'creó la solicitud',
-  'requests.updated': 'actualizó la solicitud',
-  'quotes.created': 'creó la cotización',
-  'quotes.updated': 'actualizó la cotización',
-  'users.updated': 'actualizó el usuario',
-  'settings.updated': 'actualizó la configuración',
-  'equipmentInterventions.created': 'registró una intervención',
-  'supportRequests.created': 'registró una solicitud de soporte',
-  'request.assigned': 'asignó la solicitud',
-  'request.reassigned': 'reasignó la solicitud',
-  'quote.sent': 'marcó como enviada la cotización',
-  'quote.accepted': 'aceptó la cotización',
-  'quote.rejected': 'rechazó la cotización',
-  'quote.cancelled': 'canceló la cotización',
-  'quote.correction_created': 'creó una corrección de la cotización',
-};
-
-const resourceLabels: Record<string, string> = {
-  requests: 'Solicitud',
-  quotes: 'Cotización',
-  users: 'Usuario',
-  settings: 'Configuración',
-  clients: 'Cliente',
-  sites: 'Instalación',
-  equipment: 'Equipo',
-  equipmentInterventions: 'Intervención',
-  supportRequests: 'Soporte',
-};
+import {
+  auditActionFilterLabel,
+  auditActionLabel,
+  auditResourceLabel,
+  visibleAuditIdentity,
+} from '../../utils/auditPresentation';
 
 type DatePreset = 'today' | 'yesterday' | '7d' | '30d' | 'custom';
 
@@ -77,7 +53,8 @@ export function ActivityPage() {
     return [...audit.data]
       .filter((item) => {
         const date = item.createdAt?.toDate?.();
-        const actorName = userMap.get(item.actorId) ?? item.actorId;
+        const actorName =
+          item.actorDisplayNameSnapshot ?? userMap.get(item.actorId) ?? 'Usuario autorizado';
         return (
           (!date || (date >= range.start && date <= range.end)) &&
           (actor === 'all' || item.actorId === actor) &&
@@ -86,7 +63,7 @@ export function ActivityPage() {
           (resource === 'all' || item.resourceType === resource) &&
           (result === 'all' || auditResult(item) === result) &&
           (!term ||
-            `${actorName} ${item.action} ${item.resourceType} ${item.resourceId}`
+            `${actorName} ${auditActionLabel(item.action)} ${auditResourceLabel(item.resourceType)} ${item.resourceLabelSnapshot ?? item.resourceId}`
               .toLocaleLowerCase('es-MX')
               .includes(term))
         );
@@ -185,7 +162,7 @@ export function ActivityPage() {
             <option value="all">Todas</option>
             {choices.actions.map((value) => (
               <option key={value} value={value}>
-                {filterActionLabel(value)}
+                {auditActionFilterLabel(value)}
               </option>
             ))}
           </select>
@@ -196,7 +173,7 @@ export function ActivityPage() {
             <option value="all">Todos</option>
             {choices.resources.map((value) => (
               <option key={value} value={value}>
-                {resourceLabels[value] ?? value}
+                {auditResourceLabel(value)}
               </option>
             ))}
           </select>
@@ -261,8 +238,18 @@ export function ActivityPage() {
 
 function AuditEntry({item, actorName, admin}: {item: AuditLog; actorName: string; admin: boolean}) {
   const changes = summarizeChanges(item.before, item.after);
-  const reason = typeof item.metadata?.reason === 'string' ? item.metadata.reason : null;
+  const reason =
+    item.reason ?? (typeof item.metadata?.reason === 'string' ? item.metadata.reason : null);
   const route = auditResourceRoute(item);
+  const identity = visibleAuditIdentity({
+    actorId: item.actorId,
+    actorDisplayNameSnapshot: item.actorDisplayNameSnapshot,
+    actorRoleSnapshot: item.actorRoleSnapshot,
+    actorRole: item.actorRole,
+    fallbackName: actorName,
+  });
+  const resourceLabel =
+    item.resourceLabelSnapshot ?? item.quoteId ?? item.requestId ?? item.resourceId;
   return (
     <article className="audit-entry">
       <div className="audit-entry__icon" aria-hidden="true">
@@ -270,11 +257,13 @@ function AuditEntry({item, actorName, admin}: {item: AuditLog; actorName: string
       </div>
       <div>
         <h3>
-          {actorName} {actionLabels[item.action] ?? item.action}.
+          {identity.name} {auditActionLabel(item.action)}.
         </h3>
         <p>
-          <strong>{resourceLabels[item.resourceType] ?? item.resourceType}:</strong>{' '}
-          {item.quoteId ?? item.requestId ?? item.resourceId}
+          <strong>{auditResourceLabel(item.resourceType)}:</strong> {resourceLabel}
+        </p>
+        <p>
+          Rol: <strong>{identity.role}</strong>
         </p>
         <p>
           Resultado: <strong>{auditResultLabel(auditResult(item))}</strong>
@@ -292,7 +281,7 @@ function AuditEntry({item, actorName, admin}: {item: AuditLog; actorName: string
               {JSON.stringify(
                 {
                   actorUid: item.actorId,
-                  actorRole: item.actorRole,
+                  actorRole: item.actorRoleSnapshot ?? item.actorRole,
                   eventKey: item.action,
                   resourceType: item.resourceType,
                   resourceId: item.resourceId,
@@ -322,6 +311,7 @@ function auditResultLabel(result: string) {
 }
 
 function auditResourceRoute(item: AuditLog) {
+  if (item.route?.startsWith('/') && !item.route.startsWith('//')) return item.route;
   const id = item.resourceId;
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) return null;
   return (
@@ -377,21 +367,6 @@ function readable(value: unknown) {
     .replace('completed', 'Completada')
     .replace('draft', 'Borrador')
     .replace('issued', 'Emitida');
-}
-
-function filterActionLabel(action: string) {
-  return (
-    {
-      'quote.sent': 'Cotización enviada',
-      'quote.accepted': 'Cotización aceptada',
-      'quote.rejected': 'Cotización rechazada',
-      'quote.cancelled': 'Cotización cancelada',
-      'quote.correction_created': 'Corrección creada',
-      'auth.login': 'Inicio de sesión',
-    }[action] ??
-    actionLabels[action] ??
-    'Acción operativa'
-  );
 }
 
 function dateRange(preset: DatePreset, from: string, to: string) {

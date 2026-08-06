@@ -5,6 +5,7 @@ import {requireActiveActor} from '../shared/auth';
 import {invalidArgument} from '../shared/errors';
 import {transitionQuoteSchema} from '../shared/schemas';
 import {canApplyCommercialTransition, type CommercialQuoteStatus} from './transitionPolicy';
+import {buildDomainAuditRecord, domainAuditId} from '../audit/domainEvent';
 
 export const transitionQuote = onCall(
   {region: 'us-central1', maxInstances: 5, enforceAppCheck: false},
@@ -18,6 +19,8 @@ export const transitionQuote = onCall(
     const admins = users.where('role', '==', 'admin');
     const activeAdmins = admins.where('status', '==', 'active');
     const adminSnapshots = to === 'sent' ? await activeAdmins.limit(50).get() : null;
+    const sourceEventId = firestore.collection('_eventIds').doc().id;
+    const eventCode = `quote.${to}`;
 
     return firestore.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(quoteRef);
@@ -37,6 +40,7 @@ export const transitionQuote = onCall(
 
       const now = FieldValue.serverTimestamp();
       const event = {
+        sourceEventId,
         from,
         to,
         actorId: actor.uid,
@@ -63,20 +67,27 @@ export const transitionQuote = onCall(
         updatedAt: now,
         updatedBy: actor.uid,
       });
-      transaction.set(firestore.collection('auditLogs').doc(), {
-        actorId: actor.uid,
-        actorRole: actor.role,
-        action: `quote.${to}`,
-        resourceType: 'quote',
-        resourceId: quoteId,
-        requestId: quote.requestId ?? null,
-        quoteId,
-        before: {status: from},
-        after: {status: to},
-        metadata: {reason: reason ?? null, result: 'success'},
-        result: 'success',
-        createdAt: now,
-      });
+      transaction.set(
+        firestore.collection('auditLogs').doc(domainAuditId(sourceEventId, eventCode)),
+        buildDomainAuditRecord({
+          sourceEventId,
+          eventCode,
+          actorUid: actor.uid,
+          actorDisplayNameSnapshot: actor.displayName || actor.email,
+          actorRoleSnapshot: actor.role,
+          resourceType: 'quote',
+          resourceId: quoteId,
+          resourceLabelSnapshot: String(quote.folio || quoteId),
+          requestId: typeof quote.requestId === 'string' ? quote.requestId : null,
+          quoteId,
+          result: 'success',
+          reason: reason ?? null,
+          before: {status: from},
+          after: {status: to},
+          route: `/quotes?quote=${encodeURIComponent(quoteId)}`,
+          occurredAt: now,
+        }),
+      );
 
       const recipients = new Set<string>();
       if (to === 'sent') adminSnapshots?.docs.forEach((admin) => recipients.add(admin.id));
