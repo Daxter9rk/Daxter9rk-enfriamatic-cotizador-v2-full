@@ -32,6 +32,7 @@
     "inventory:dev": "tsx scripts/inventory-dev.ts",
     "seed:dev": "tsx scripts/seed-dev.ts",
     "rollback:dev-seed": "tsx scripts/rollback-dev-seed.ts",
+    "review-users:dev": "tsx scripts/dev-review-users/index.ts",
     "deploy:dev:firestore": "npm run preflight:dev && npx -y firebase-tools@latest deploy --only firestore:rules,firestore:indexes --project enfriamatic-cotizador-de-420e5",
     "deploy:dev:storage": "npm run preflight:dev && npx -y firebase-tools@latest deploy --only storage --project enfriamatic-cotizador-de-420e5",
     "deploy:dev:functions": "npm run preflight:dev && npx -y firebase-tools@latest deploy --only functions --project enfriamatic-cotizador-de-420e5",
