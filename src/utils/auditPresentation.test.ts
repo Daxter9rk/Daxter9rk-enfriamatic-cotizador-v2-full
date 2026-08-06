@@ -27,4 +27,11 @@ describe('presentación de auditoría', () => {
     ).toEqual({name: 'Administrador DEV', role: 'Administrador'});
     expect(auditRoleLabel('operator')).toBe('Operador');
   });
+
+  it('traduce las operaciones de imágenes del catálogo comercial', () => {
+    expect(auditActionLabel('catalog.image_added')).toBe('agregó una imagen al artículo');
+    expect(auditActionLabel('catalog.image_changed')).toBe('cambió la imagen del artículo');
+    expect(auditActionLabel('catalog.image_deleted')).toBe('eliminó la imagen del artículo');
+    expect(auditResourceLabel('catalog')).toBe('Artículo comercial');
+  });
 });
