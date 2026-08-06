@@ -1,4 +1,4 @@
-import {useMemo, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 
 export interface SearchableOption {
   value: string;
@@ -28,6 +28,15 @@ export function SearchableSelect({
   const selected = options.find((option) => option.value === value);
   const [query, setQuery] = useState(selected?.label ?? '');
   const [open, setOpen] = useState(false);
+  const keepTypedQuery = useRef(false);
+  useEffect(() => {
+    if (keepTypedQuery.current && value === '') {
+      keepTypedQuery.current = false;
+      return;
+    }
+    keepTypedQuery.current = false;
+    setQuery(selected?.label ?? '');
+  }, [selected?.label, value]);
   const visible = useMemo(() => {
     const term = query.trim().toLocaleLowerCase('es-MX');
     if (!term || selected?.label === query) return options.slice(0, 30);
@@ -61,7 +70,10 @@ export function SearchableSelect({
         onChange={(event) => {
           setQuery(event.target.value);
           setOpen(true);
-          if (event.target.value !== selected?.label) onChange?.('');
+          if (event.target.value !== selected?.label) {
+            keepTypedQuery.current = true;
+            onChange?.('');
+          }
         }}
       />
       {open && !disabled && (
