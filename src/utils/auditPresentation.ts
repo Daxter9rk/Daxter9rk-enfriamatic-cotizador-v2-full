@@ -50,6 +50,17 @@ const resourceLabels: Record<string, string> = {
   supportRequests: 'Soporte',
 };
 
+const actionFilterLabels: Record<string, string> = {
+  'auth.login': 'Inicio de sesión',
+  'quote.issued': 'Cotización emitida',
+  'quote.sent': 'Cotización enviada',
+  'quote.accepted': 'Cotización aceptada',
+  'quote.rejected': 'Cotización rechazada',
+  'quote.cancelled': 'Cotización cancelada',
+  'quote.correction_created': 'Corrección creada',
+  'equipment.intervention_created': 'Intervención registrada',
+};
+
 export function auditActionLabel(action: string): string {
   return actionLabels[action] ?? 'realizó una acción operativa';
 }
@@ -81,6 +92,7 @@ export function visibleAuditIdentity(input: {
 }
 
 export function auditActionFilterLabel(action: string): string {
+  if (actionFilterLabels[action]) return actionFilterLabels[action];
   const label = auditActionLabel(action);
   return label === 'realizó una acción operativa' ? 'Acción operativa' : label;
 }

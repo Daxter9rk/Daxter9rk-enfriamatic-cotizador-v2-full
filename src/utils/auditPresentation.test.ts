@@ -1,5 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {
+  auditActionFilterLabel,
   auditActionLabel,
   auditResourceLabel,
   auditRoleLabel,
@@ -10,10 +11,9 @@ describe('presentación de auditoría', () => {
   it('traduce eventos conocidos y ofrece un fallback seguro', () => {
     expect(auditActionLabel('auth.login')).toBe('inició sesión');
     expect(auditActionLabel('quote.issued')).toBe('emitió la cotización');
-    expect(auditActionLabel('equipment.intervention_created')).toBe(
-      'registró una intervención',
-    );
+    expect(auditActionLabel('equipment.intervention_created')).toBe('registró una intervención');
     expect(auditActionLabel('unknown.internal_code')).toBe('realizó una acción operativa');
+    expect(auditActionFilterLabel('quote.sent')).toBe('Cotización enviada');
     expect(auditResourceLabel('equipmentInterventions')).toBe('Intervención');
   });
 
