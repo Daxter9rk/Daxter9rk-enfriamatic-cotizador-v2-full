@@ -10,4 +10,4 @@ Resultado final:
 
 Una primera ejecución E2E detectó dos nodos con el mismo texto de acción (opción de filtro y tarjeta). Se centralizó una etiqueta nominal distinta para filtros. Un intento focalizado sirvió `dist` anterior por no reconstruir; la repetición integral con rebuild pasó y `test-results/.last-run.json` quedó en `passed`.
 
-La CI remota no pudo consultarse: `gh auth status` reporta autenticación expirada y el conector no tiene acceso al repositorio. No se declara CI verde sin evidencia.
+La CI remota del PR #7 quedó verde sobre `3d94ba6`: `validate` pasó en 1m48s y `emulator-tests` en 3m38s. Git por HTTPS y `gh pr` funcionaron para publicar y consultar el PR.
