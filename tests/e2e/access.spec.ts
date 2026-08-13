@@ -28,6 +28,14 @@ test('operator cannot access user administration', async ({page}) => {
   await expect(page.getByRole('heading', {name: /buen día/i})).toBeVisible();
 });
 
+test('legacy internal catalogs route does not expose the technical CRUD', async ({page}) => {
+  await submitLogin(page, 'admin@enfriamatic.local');
+  await page.goto('/catalogs', {waitUntil: 'domcontentloaded'});
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page.getByRole('heading', {name: 'Configuración'})).toBeVisible();
+  await expect(page.getByRole('heading', {name: 'Catálogos internos'})).toHaveCount(0);
+});
+
 test('inactive account receives a specific block and can sign out', async ({page}) => {
   await submitLogin(page, 'inactivo@enfriamatic.local');
   await expect(page.getByRole('heading', {name: 'Cuenta inactiva'})).toBeVisible();

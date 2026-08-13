@@ -39,9 +39,6 @@ const RequestsPage = lazy(() =>
 const QuotesPage = lazy(() =>
   import('../features/quotes/QuotesPage').then((module) => ({default: module.QuotesPage})),
 );
-const CatalogsPage = lazy(() =>
-  import('../features/catalogs/CatalogsPage').then((module) => ({default: module.CatalogsPage})),
-);
 const CommercialCatalogPage = lazy(() =>
   import('../features/commercial-catalog/CommercialCatalogPage').then((module) => ({
     default: module.CommercialCatalogPage,
@@ -117,7 +114,7 @@ export function App() {
             {profile?.role === 'admin' ? <UsersPage /> : <Redirect to="/" replace />}
           </Route>
           <Route path="/catalogs">
-            <CatalogsPage />
+            <Redirect to={profile?.role === 'admin' ? '/settings' : '/'} replace />
           </Route>
           <Route path="/settings">
             {profile?.role === 'admin' ? <SettingsPage /> : <Redirect to="/" replace />}

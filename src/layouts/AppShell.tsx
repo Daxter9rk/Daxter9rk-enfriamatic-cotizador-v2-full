@@ -20,7 +20,6 @@ const operationalLinks: NavigationItem[] = [
   {href: '/quotes', label: 'Cotizaciones', icon: 'quote'},
   {href: '/commercial-catalog', label: 'Catálogo comercial', icon: 'catalog'},
   {href: '/activity', label: 'Actividad', icon: 'activity'},
-  {href: '/catalogs', label: 'Catálogos internos', icon: 'catalog'},
 ];
 
 const helpLinks: NavigationItem[] = [
