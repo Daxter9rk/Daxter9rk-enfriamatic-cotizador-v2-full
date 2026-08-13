@@ -206,9 +206,14 @@ describe('Storage rules — equipment, catalog, and support', () => {
     );
   });
 
-  it('restricts catalog images to admins and rejects SVG', async () => {
+  it('keeps legacy and backend catalog paths inaccessible to every browser identity', async () => {
     const path = 'catalog/CAT-1/catalog-file/catalog-file.png';
-    await assertSucceeds(
+    const backendPath = 'catalog-items/CAT-1/images/backend-operation.png';
+    await environment.withSecurityRulesDisabled(async (context) => {
+      await uploadBytes(ref(context.storage(), path), image, {contentType: 'image/png'});
+      await uploadBytes(ref(context.storage(), backendPath), image, {contentType: 'image/png'});
+    });
+    await assertFails(
       uploadBytes(ref(environment.authenticatedContext('promoted-admin').storage(), path), image, {
         contentType: 'image/png',
       }),
@@ -222,6 +227,24 @@ describe('Storage rules — equipment, catalog, and support', () => {
       uploadBytes(ref(environment.authenticatedContext('admin').storage(), path), image, {
         contentType: 'image/svg+xml',
       }),
+    );
+    await assertFails(getBytes(ref(environment.authenticatedContext('admin').storage(), path)));
+    await assertFails(deleteObject(ref(environment.authenticatedContext('admin').storage(), path)));
+    await assertFails(
+      getBytes(ref(environment.authenticatedContext('promoted-admin').storage(), backendPath)),
+    );
+    await assertFails(
+      deleteObject(ref(environment.authenticatedContext('promoted-admin').storage(), backendPath)),
+    );
+    await assertFails(
+      uploadBytes(
+        ref(
+          environment.authenticatedContext('admin').storage(),
+          'catalog-items/CAT-1/images/client-controlled.png',
+        ),
+        image,
+        {contentType: 'image/png'},
+      ),
     );
   });
 

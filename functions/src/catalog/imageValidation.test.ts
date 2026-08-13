@@ -1,4 +1,4 @@
-import sharp from 'sharp';
+import sharp = require('sharp');
 import {beforeAll, describe, expect, it} from 'vitest';
 import {MAX_CATALOG_IMAGE_BYTES, validateCatalogImage} from './imageValidation';
 

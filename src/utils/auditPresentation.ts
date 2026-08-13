@@ -24,6 +24,11 @@ const actionLabels: Record<string, string> = {
   'quote.correction_created': 'creó una corrección de la cotización',
   'catalogs.created': 'creó un elemento de catálogo',
   'catalogs.updated': 'actualizó un elemento de catálogo',
+  'catalog.image_added': 'agregó una imagen al artículo',
+  'catalog.image_changed': 'cambió la imagen del artículo',
+  'catalog.image_deleted': 'eliminó la imagen del artículo',
+  'catalog.image_cleanup_pending': 'registró una limpieza pendiente de imagen',
+  'catalog.image_cleanup_completed': 'completó la limpieza de una imagen',
   'settings.updated': 'actualizó la configuración',
   'supportRequests.created': 'registró una solicitud de soporte',
   'user.created': 'creó el usuario',
@@ -46,6 +51,7 @@ const resourceLabels: Record<string, string> = {
   quote: 'Cotización',
   quotes: 'Cotización',
   catalogs: 'Catálogo interno',
+  catalog: 'Artículo comercial',
   settings: 'Configuración',
   supportRequests: 'Soporte',
 };
@@ -59,6 +65,11 @@ const actionFilterLabels: Record<string, string> = {
   'quote.cancelled': 'Cotización cancelada',
   'quote.correction_created': 'Corrección creada',
   'equipment.intervention_created': 'Intervención registrada',
+  'catalog.image_added': 'Imagen de artículo agregada',
+  'catalog.image_changed': 'Imagen de artículo cambiada',
+  'catalog.image_deleted': 'Imagen de artículo eliminada',
+  'catalog.image_cleanup_pending': 'Limpieza de imagen pendiente',
+  'catalog.image_cleanup_completed': 'Limpieza de imagen completada',
 };
 
 export function auditActionLabel(action: string): string {

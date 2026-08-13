@@ -115,6 +115,31 @@ describe('Firestore rules — commercial catalog', () => {
         updatedBy: 'admin',
       }),
     );
+    await assertFails(
+      updateDoc(doc(db, 'catalogItems/SERV-NEW'), {
+        imageStoragePath: 'catalog-items/SERV-NEW/images/client-path.png',
+        imageFileName: 'client.png',
+        imageMimeType: 'image/png',
+        imageSizeBytes: 3,
+        imageStatus: 'ready',
+        updatedAt: serverTimestamp(),
+        updatedBy: 'admin',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(db, 'catalogItems/SERV-WITH-IMAGE'), {
+        ...catalogItem('SERV-WITH-IMAGE', 'active', 'service'),
+        imageStoragePath: 'catalog-items/SERV-WITH-IMAGE/images/client-path.png',
+        imageFileName: 'client.png',
+        imageMimeType: 'image/png',
+        imageSizeBytes: 3,
+        imageStatus: 'ready',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        createdBy: 'admin',
+        updatedBy: 'admin',
+      }),
+    );
     await assertFails(deleteDoc(doc(db, 'catalogItems/SERV-NEW')));
   });
 

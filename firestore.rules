@@ -827,11 +827,19 @@ service cloud.firestore {
       allow create: if isAdmin()
         && catalogItemId == request.resource.data.code
         && validCatalogItem(request.resource.data)
+        && !request.resource.data.keys().hasAny([
+          'imageStoragePath', 'imageFileName', 'imageMimeType',
+          'imageSizeBytes', 'imageStatus'
+        ])
         && validCreateAudit(request.resource.data);
       allow update: if isAdmin()
         && catalogItemId == resource.data.code
         && request.resource.data.code == resource.data.code
         && validCatalogItem(request.resource.data)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'imageStoragePath', 'imageFileName', 'imageMimeType',
+          'imageSizeBytes', 'imageStatus'
+        ])
         && validUpdateAudit(request.resource.data);
       allow delete: if false;
     }

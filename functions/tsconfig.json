@@ -3,6 +3,8 @@
     "module": "NodeNext",
     "esModuleInterop": true,
     "moduleResolution": "nodenext",
+    "baseUrl": ".",
+    "paths": {"sharp": ["node_modules/sharp/lib/index.d.ts"]},
     "noImplicitReturns": true,
     "noUnusedLocals": true,
     "outDir": "lib",

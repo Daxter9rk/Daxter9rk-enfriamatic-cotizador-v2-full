@@ -23,7 +23,12 @@ function gateway(overrides: Partial<CatalogImageGateway> = {}): CatalogImageGate
   };
 }
 
-const actor = {uid: 'admin', displayName: 'Admin', email: 'admin@example.test', role: 'admin' as const};
+const actor = {
+  uid: 'admin',
+  displayName: 'Admin',
+  email: 'admin@example.test',
+  role: 'admin' as const,
+};
 const image = {
   bytes: Buffer.from([1, 2, 3]),
   mimeType: 'image/png' as const,
@@ -36,6 +41,19 @@ const image = {
 };
 
 describe('catalog image consistency workflow', () => {
+  it('does not commit metadata when Storage rejects the upload', async () => {
+    const store = gateway({uploadUnique: vi.fn().mockRejectedValue(new Error('storage'))});
+    await expect(
+      upsertCatalogImageWorkflow(
+        {catalogItemId: 'PROD-1', operationId: 'operation-123', image},
+        actor,
+        store,
+      ),
+    ).rejects.toThrow('storage');
+    expect(store.commitUpsert).not.toHaveBeenCalled();
+    expect(store.deleteExact).not.toHaveBeenCalled();
+  });
+
   it('compensates the new object when Firestore fails after upload', async () => {
     const store = gateway({commitUpsert: vi.fn().mockRejectedValue(new Error('firestore'))});
     await expect(
@@ -44,7 +62,7 @@ describe('catalog image consistency workflow', () => {
         actor,
         store,
       ),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({code: 'unavailable', details: {reason: 'article-update'}});
     expect(store.deleteExact).toHaveBeenCalledWith(
       'catalog-items/PROD-1/images/operation-123.png',
       '1',
@@ -94,5 +112,77 @@ describe('catalog image consistency workflow', () => {
     );
     expect(result).toMatchObject({deleted: false});
     expect(store.deleteExact).not.toHaveBeenCalled();
+  });
+
+  it('removes the Firestore reference before deleting the physical object', async () => {
+    const order: string[] = [];
+    const previous = {
+      storagePath: 'catalog-items/PROD-1/images/old.png',
+      generation: '7',
+    };
+    const store = gateway({
+      readCurrent: vi.fn().mockResolvedValue({
+        itemLabel: 'Aceite de prueba',
+        current: previous,
+        revision: 'old-operation',
+      }),
+      commitDelete: vi.fn().mockImplementation(async () => {
+        order.push('firestore-commit');
+        return {kind: 'committed' as const, previous};
+      }),
+      deleteExact: vi.fn().mockImplementation(async () => {
+        order.push('storage-delete');
+      }),
+      completeCleanup: vi.fn().mockImplementation(async () => {
+        order.push('cleanup-complete');
+      }),
+    });
+
+    await deleteCatalogImageWorkflow(
+      {catalogItemId: 'PROD-1', operationId: 'delete-operation-123'},
+      actor,
+      store,
+    );
+
+    expect(order).toEqual(['firestore-commit', 'storage-delete', 'cleanup-complete']);
+  });
+
+  it('reports article-update when deleting the Firestore reference fails', async () => {
+    const store = gateway({commitDelete: vi.fn().mockRejectedValue(new Error('firestore'))});
+    await expect(
+      deleteCatalogImageWorkflow(
+        {catalogItemId: 'PROD-1', operationId: 'delete-operation-123'},
+        actor,
+        store,
+      ),
+    ).rejects.toMatchObject({code: 'unavailable', details: {reason: 'article-update'}});
+    expect(store.deleteExact).not.toHaveBeenCalled();
+  });
+
+  it('retries and completes a pending cleanup without repeating the mutation', async () => {
+    const cleanupPending = {
+      storagePath: 'catalog-items/PROD-1/images/orphan.png',
+      generation: '9',
+    };
+    const store = gateway({
+      getCompletedOperation: vi.fn().mockResolvedValue({
+        catalogItemId: 'PROD-1',
+        operationId: 'operation-123',
+        status: 'ready',
+        cleanupPending,
+      }),
+    });
+
+    const result = await upsertCatalogImageWorkflow(
+      {catalogItemId: 'PROD-1', operationId: 'operation-123', image},
+      actor,
+      store,
+    );
+
+    expect(store.uploadUnique).not.toHaveBeenCalled();
+    expect(store.commitUpsert).not.toHaveBeenCalled();
+    expect(store.deleteExact).toHaveBeenCalledWith(cleanupPending.storagePath, '9');
+    expect(store.completeCleanup).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({idempotent: true, cleanupPending: null});
   });
 });

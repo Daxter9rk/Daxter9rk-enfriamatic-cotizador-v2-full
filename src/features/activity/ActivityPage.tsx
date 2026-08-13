@@ -326,6 +326,7 @@ function auditResourceRoute(item: AuditLog) {
         site: `/sites/${id}`,
         sites: `/sites/${id}`,
         equipment: `/equipment/${id}`,
+        catalog: `/commercial-catalog?item=${encodeURIComponent(id)}`,
       } as Record<string, string>
     )[item.resourceType] ?? null
   );

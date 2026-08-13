@@ -37,6 +37,14 @@ const accounts = [
     profile: true,
   },
   {
+    uid: 'seed-admin-promoted',
+    email: 'admin.promovido@enfriamatic.local',
+    displayName: 'Admin Promovido Emulador',
+    role: 'admin',
+    status: 'active',
+    profile: true,
+  },
+  {
     uid: 'seed-operator-inactive',
     email: 'inactivo@enfriamatic.local',
     displayName: 'Operador Inactivo',
@@ -93,7 +101,7 @@ for (const account of accounts) {
       updatedBy: 'seed-admin-active',
       lastLoginAt: null,
       lastActivityAt: account.role === 'operator' && account.status === 'active' ? now : null,
-      isPrimaryAdmin: account.role === 'admin' && account.status === 'active',
+      isPrimaryAdmin: account.uid === 'seed-admin-active',
       schemaVersion: 1,
     });
   }

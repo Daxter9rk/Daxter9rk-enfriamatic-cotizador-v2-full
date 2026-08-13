@@ -32,3 +32,8 @@ export {assignRequest} from './requests/assignRequest';
 export {downloadQuotePdf} from './documents/downloadQuotePdf';
 export {auditDomainWrite} from './audit/domainWrite';
 export {syncEquipmentIntervention} from './equipment/syncIntervention';
+export {
+  upsertCatalogImage,
+  deleteCatalogImage,
+  getCatalogImageContent,
+} from './catalog/catalogImageCallables';

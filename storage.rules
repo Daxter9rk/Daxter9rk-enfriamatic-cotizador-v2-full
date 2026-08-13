@@ -114,27 +114,13 @@ service firebase.storage {
     }
 
     match /catalog/{code}/{fileId}/{fileName} {
-      function item() {
-        return firestore.get(
-          /databases/(default)/documents/catalogItems/$(code)
-        ).data;
-      }
+      // Catalog images are backend-only. Gen2 callables validate the real bytes,
+      // authorize against the current Firestore profile, and use Admin Storage.
+      allow read, write: if false;
+    }
 
-      allow read: if isActiveUser()
-        && (profile().role == 'admin' || item().status == 'active')
-        && item().imageStatus == 'ready'
-        && item().imageStoragePath == 'catalog/' + code + '/' + fileId + '/' + fileName;
-      allow create: if isActiveUser()
-        && profile().role == 'admin'
-        && request.resource.size > 0
-        && request.resource.size <= 5 * 1024 * 1024
-        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp']
-        && item().imageStatus == 'pending'
-        && item().imageStoragePath == 'catalog/' + code + '/' + fileId + '/' + fileName
-        && item().imageMimeType == request.resource.contentType
-        && item().imageSizeBytes == request.resource.size;
-      allow delete: if isActiveUser() && profile().role == 'admin';
-      allow update: if false;
+    match /catalog-items/{code}/images/{fileName} {
+      allow read, write: if false;
     }
 
     match /support/{supportId}/{fileId}/{fileName} {

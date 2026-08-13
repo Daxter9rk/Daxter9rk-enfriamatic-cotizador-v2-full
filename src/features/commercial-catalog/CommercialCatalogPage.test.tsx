@@ -1,5 +1,5 @@
-import {render, screen} from '@testing-library/react';
-import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {cleanup, render, screen} from '@testing-library/react';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {CommercialCatalogPage} from './CommercialCatalogPage';
 
 const state = vi.hoisted(() => ({role: 'operator'}));
@@ -38,6 +38,13 @@ const catalogItems = vi.hoisted(() => [
 vi.mock('../../app/providers/AuthProvider', () => ({
   useAuth: () => ({profile: {uid: 'actor', role: state.role}}),
 }));
+vi.mock('../../services/firebase/catalogImages', () => ({
+  getCatalogImageBlob: vi.fn().mockRejectedValue({code: 'functions/not-found'}),
+  upsertCatalogImage: vi.fn(),
+  deleteCatalogImage: vi.fn(),
+  catalogImageErrorMessage: () => 'Imagen no disponible.',
+  catalogImageTechnicalCode: () => 'functions/not-found',
+}));
 vi.mock('../../hooks/useCollection', () => ({
   useCollection: () => ({
     data: catalogItems,
@@ -48,6 +55,8 @@ vi.mock('../../hooks/useCollection', () => ({
 }));
 
 describe('CommercialCatalogPage', () => {
+  afterEach(cleanup);
+
   beforeEach(() => {
     state.role = 'operator';
   });
@@ -61,7 +70,7 @@ describe('CommercialCatalogPage', () => {
     state.role = 'admin';
     render(<CommercialCatalogPage />);
     expect(screen.getByRole('button', {name: /nuevo artículo/i})).toBeVisible();
-    expect(screen.getByRole('button', {name: /desactivar/i})).toBeVisible();
+    expect(screen.getAllByRole('button', {name: /desactivar/i})).toHaveLength(2);
     expect(screen.getByRole('button', {name: /agregar imagen/i})).toBeVisible();
     expect(screen.getByRole('button', {name: /cambiar imagen/i})).toBeVisible();
     expect(screen.getByRole('button', {name: /eliminar imagen/i})).toBeVisible();
