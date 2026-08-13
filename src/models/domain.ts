@@ -1,18 +1,19 @@
 import type {Timestamp} from 'firebase/firestore';
+import type {
+  DiscountDisplayMode,
+  DocumentStatus,
+  QuoteStatus,
+} from '../modules/quotes/domain/types';
+
+export type {
+  DiscountDisplayMode,
+  DocumentStatus,
+  QuoteStatus,
+} from '../modules/quotes/domain/types';
 
 export type UserRole = 'admin' | 'operator';
 export type UserStatus = 'active' | 'inactive' | 'pending' | 'suspended';
 export type RequestStatus = 'pending' | 'assigned' | 'in_progress' | 'completed' | 'cancelled';
-export type QuoteStatus =
-  | 'draft'
-  | 'issued'
-  | 'sent'
-  | 'accepted'
-  | 'rejected'
-  | 'cancelled'
-  | 'expired';
-export type DocumentStatus = 'not_generated' | 'generating' | 'ready' | 'failed';
-export type DiscountDisplayMode = 'detailed' | 'summary' | 'incorporated';
 export type CatalogItemType = 'product' | 'service';
 export type CatalogItemStatus = 'active' | 'inactive';
 

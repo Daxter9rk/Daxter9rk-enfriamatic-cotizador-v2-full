@@ -1,4 +1,4 @@
-import type {DiscountDisplayMode, QuoteItem} from '../models/domain';
+import type {DiscountDisplayMode} from './types';
 
 export interface CalculatedItem {
   discountAmount: number;
@@ -14,10 +14,13 @@ export interface QuoteTotals {
   grandTotal: number;
 }
 
-type CalculableItem = Pick<
-  QuoteItem,
-  'quantity' | 'originalUnitPrice' | 'discountType' | 'discountValue' | 'taxable'
->;
+export interface CalculableItem {
+  quantity: number;
+  originalUnitPrice: number;
+  discountType: 'none' | 'percentage' | 'fixed';
+  discountValue: number;
+  taxable: boolean;
+}
 
 export const roundMoney = (value: number): number =>
   Math.round((value + Number.EPSILON) * 100) / 100;

@@ -13,14 +13,20 @@ import type {
 } from '../../models/domain';
 import {quoteItemInputSchema} from '../../models/schemas';
 import {
+  calculateItem,
+  calculateQuoteTotals,
+  createQuoteItemFromCatalog,
+  discountModeLabel,
+  quoteStatusLabel,
+} from '../../modules/quotes';
+import {
   callFunction,
   deleteQuoteItem,
   listQuoteItems,
   saveQuoteItem,
   updateDocument,
 } from '../../services/firebase/data';
-import {calculateItem, calculateQuoteTotals, discountModeLabel} from '../../utils/calculations';
-import {catalogItemToQuoteInput, matchesCatalogSearch} from '../../utils/catalog';
+import {matchesCatalogSearch} from '../../utils/catalog';
 import {formatCurrency, formatDate, safeFileName} from '../../utils/format';
 
 interface IssueResult {
@@ -130,7 +136,7 @@ export function QuoteEditor({
     setBusy(true);
     setMessage(null);
     try {
-      const parsed = quoteItemInputSchema.parse(catalogItemToQuoteInput(item, items.length));
+      const parsed = quoteItemInputSchema.parse(createQuoteItemFromCatalog(item, items.length));
       await saveQuoteItem(quote.id, null, {...parsed, ...calculateItem(parsed)});
       await persistTotals();
     } catch (error) {
@@ -219,7 +225,7 @@ export function QuoteEditor({
       });
       setTransitionTarget(null);
       await onChanged();
-      setMessage(`Estado actualizado a ${transitionLabel(transitionTarget)}.`);
+      setMessage(`Estado actualizado a ${quoteStatusLabel(transitionTarget)}.`);
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : 'No se pudo actualizar el estado comercial.',
@@ -244,7 +250,7 @@ export function QuoteEditor({
             </div>
             <div>
               <span>Estado</span>
-              <strong>{transitionLabel(quote.status)}</strong>
+              <strong>{quoteStatusLabel(quote.status)}</strong>
             </div>
           </header>
           {loading ? (
@@ -356,7 +362,7 @@ export function QuoteEditor({
                   {quote.commercialHistory.map((event, index) => (
                     <article key={`${event.to}-${index}`}>
                       <strong>
-                        {transitionLabel(event.from)} → {transitionLabel(event.to)}
+                        {quoteStatusLabel(event.from)} → {quoteStatusLabel(event.to)}
                       </strong>
                       {event.reason && <p>Motivo: {event.reason}</p>}
                       <small>
@@ -659,7 +665,7 @@ function CommercialActions({
           <p>
             Confirmar transición:{' '}
             <strong>
-              {transitionLabel(quote.status)} → {transitionLabel(target)}
+              {quoteStatusLabel(quote.status)} → {quoteStatusLabel(target)}
             </strong>
           </p>
           {['rejected', 'cancelled'].includes(target) && (
@@ -783,18 +789,6 @@ export function chunkQuoteItems(items: QuoteItem[], pageSize: number) {
   );
 }
 
-function transitionLabel(status: QuoteStatus): string {
-  return {
-    draft: 'Borrador',
-    issued: 'Emitida',
-    sent: 'Enviada',
-    accepted: 'Aceptada',
-    rejected: 'Rechazada',
-    cancelled: 'Cancelada',
-    expired: 'Expirada',
-  }[status];
-}
-
 function transitionActionLabel(status: QuoteStatus): string {
   const labels: Partial<Record<QuoteStatus, string>> = {
     sent: 'Marcar enviada',
@@ -802,5 +796,5 @@ function transitionActionLabel(status: QuoteStatus): string {
     rejected: 'Marcar rechazada',
     cancelled: 'Cancelar',
   };
-  return labels[status] ?? transitionLabel(status);
+  return labels[status] ?? quoteStatusLabel(status);
 }

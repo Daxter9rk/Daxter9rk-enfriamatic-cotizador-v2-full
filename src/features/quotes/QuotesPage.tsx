@@ -16,7 +16,8 @@ import type {
   UserProfile,
   UserRole,
 } from '../../models/domain';
-import {constraints, createDocument, getDocument} from '../../services/firebase/data';
+import {getQuoteRecord} from '../../modules/quotes';
+import {constraints, createDocument} from '../../services/firebase/data';
 import {formatCurrency, formatDate} from '../../utils/format';
 import {
   closeDetailSearch,
@@ -154,7 +155,7 @@ export function QuotesPage() {
       );
       setCreating(false);
       await quotes.reload();
-      const created = await getDocument<Quote>('quotes', id);
+      const created = await getQuoteRecord(id);
       if (created) openQuote(created);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo crear la cotización.');
@@ -350,7 +351,7 @@ export function QuotesPage() {
           onClose={closeQuote}
           onChanged={async () => {
             await quotes.reload();
-            setSelected(await getDocument<Quote>('quotes', selected.id));
+            setSelected(await getQuoteRecord(selected.id));
           }}
         />
       )}
