@@ -17,6 +17,7 @@ import {
   calculateQuoteTotals,
   createQuoteItemFromCatalog,
   discountModeLabel,
+  updateQuoteRecord,
   quoteStatusLabel,
 } from '../../modules/quotes';
 import {
@@ -66,6 +67,8 @@ export function QuoteEditor({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [serviceReference, setServiceReference] = useState(quote.serviceReference ?? '');
+  const [technicalContext, setTechnicalContext] = useState(quote.technicalContext ?? '');
   const [preview, setPreview] = useState(false);
   const [editingItem, setEditingItem] = useState<QuoteItem | null>(null);
   const [catalogSearch, setCatalogSearch] = useState('');
@@ -160,6 +163,12 @@ export function QuoteEditor({
   };
 
   const issue = async () => {
+    if (!quote.requestId) {
+      setMessage(
+        'Esta cotizaciÃ³n puede guardarse y revisarse. La emisiÃ³n se habilitarÃ¡ en una etapa posterior.',
+      );
+      return;
+    }
     setBusy(true);
     setMessage(null);
     try {
@@ -174,6 +183,30 @@ export function QuoteEditor({
       setMessage(`Cotización ${result.folio} emitida correctamente.`);
     } catch {
       setMessage('La emisión no concluyó. El borrador permanece editable y puede reintentarse.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveDetails = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy(true);
+    setMessage(null);
+    try {
+      const form = new FormData(event.currentTarget);
+      await updateQuoteRecord(
+        quote,
+        {
+          notes: String(form.get('notes') ?? ''),
+          serviceReference,
+          technicalContext,
+        },
+        {id: profileId, role: profileRole},
+      );
+      await onChanged();
+      setMessage('Datos de la cotizaciÃ³n guardados.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudieron guardar los datos.');
     } finally {
       setBusy(false);
     }
@@ -246,7 +279,11 @@ export function QuoteEditor({
             </div>
             <div>
               <span>Instalación</span>
-              <strong>{site?.name ?? quote.siteId}</strong>
+              {quote.siteId ? (
+                <strong>{site?.name ?? quote.siteId}</strong>
+              ) : (
+                <strong>Sin instalaciÃ³n vinculada</strong>
+              )}
             </div>
             <div>
               <span>Estado</span>
@@ -267,6 +304,38 @@ export function QuoteEditor({
                     {quote.lastRejectedAt ? formatDate(quote.lastRejectedAt) : 'Fecha registrada'}
                   </small>
                 </section>
+              )}
+              {!quote.locked && (
+                <form
+                  className="form-grid quote-context-form"
+                  onSubmit={(event) => void saveDetails(event)}
+                >
+                  <label>
+                    Referencia de servicio
+                    <input
+                      name="serviceReference"
+                      value={serviceReference}
+                      maxLength={500}
+                      onChange={(event) => setServiceReference(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Contexto tÃ©cnico
+                    <textarea
+                      name="technicalContext"
+                      value={technicalContext}
+                      maxLength={2000}
+                      onChange={(event) => setTechnicalContext(event.target.value)}
+                    />
+                  </label>
+                  <label className="field-wide">
+                    Notas
+                    <textarea name="notes" defaultValue={quote.notes ?? ''} maxLength={4000} />
+                  </label>
+                  <button className="button button--secondary field-wide" disabled={busy}>
+                    Guardar datos de cotizaciÃ³n
+                  </button>
+                </form>
               )}
               <div className="quote-items">
                 {items.length === 0 ? (
@@ -322,11 +391,15 @@ export function QuoteEditor({
                 {quote.status === 'draft' && (
                   <button
                     className="button button--primary"
-                    disabled={busy || items.length === 0}
+                    disabled={busy || items.length === 0 || !quote.requestId}
                     onClick={() => void issue()}
                     data-testid="issue-quote"
                   >
-                    {busy ? 'Procesando…' : 'Generar PDF y emitir'}
+                    {quote.requestId
+                      ? busy
+                        ? 'Procesando…'
+                        : 'Generar PDF y emitir'
+                      : 'Emisión no disponible'}
                   </button>
                 )}
                 {quote.documentStatus === 'ready' && (
@@ -733,10 +806,24 @@ function Preview({
                 <span>Cliente</span>
                 <strong>{client?.name ?? quote.clientId}</strong>
               </div>
-              <div>
-                <span>Instalación</span>
-                <strong>{site?.name ?? quote.siteId}</strong>
-              </div>
+              {quote.siteId && (
+                <div>
+                  <span>Instalación</span>
+                  <strong>{site?.name ?? quote.siteId}</strong>
+                </div>
+              )}
+              {quote.serviceReference && (
+                <div>
+                  <span>Referencia de servicio</span>
+                  <strong>{quote.serviceReference}</strong>
+                </div>
+              )}
+              {quote.technicalContext && (
+                <div>
+                  <span>Contexto técnico</span>
+                  <strong>{quote.technicalContext}</strong>
+                </div>
+              )}
               {quote.equipmentId && (
                 <div>
                   <span>Equipo</span>

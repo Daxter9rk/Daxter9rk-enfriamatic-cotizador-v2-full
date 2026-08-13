@@ -16,8 +16,13 @@ import type {
   UserProfile,
   UserRole,
 } from '../../models/domain';
-import {getQuoteRecord} from '../../modules/quotes';
-import {constraints, createDocument} from '../../services/firebase/data';
+import {
+  createQuoteRecord,
+  createQuoteDraft,
+  getQuoteRecord,
+  normalizeQuoteRecord,
+} from '../../modules/quotes';
+import {constraints} from '../../services/firebase/data';
 import {formatCurrency, formatDate} from '../../utils/format';
 import {
   closeDetailSearch,
@@ -40,8 +45,13 @@ export function QuotesPage() {
   const equipment = useCollection<Equipment>('equipment', masterDataFilter);
   const catalog = useCollection<CatalogItem>('catalogItems', [constraints.activeOnly()], 100);
   const users = useCollection<UserProfile>('users', [], 100, profile?.role === 'admin');
+  const normalizedQuotes = useMemo(
+    () => quotes.data.map((quote) => normalizeQuoteRecord(quote)),
+    [quotes.data],
+  );
   const [selected, setSelected] = useState<Quote | null>(null);
   const [creating, setCreating] = useState(false);
+  const [creationClientId, setCreationClientId] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [quoteSearch, setQuoteSearch] = useState('');
   const [clientFilter, setClientFilter] = useState('all');
@@ -58,14 +68,14 @@ export function QuotesPage() {
   useEffect(() => {
     const quoteId = detailIdFromSearch(search, 'quote');
     if (quoteId && selected?.id !== quoteId) {
-      const target = quotes.data.find((quote) => quote.id === quoteId);
+      const target = normalizedQuotes.find((quote) => quote.id === quoteId);
       if (target) setSelected(target);
       else if (!quotes.loading) {
         setMessage('La cotización no existe o no tienes permiso para consultarla.');
       }
     }
     if (!quoteId && selected) setSelected(null);
-  }, [quotes.data, quotes.loading, search, selected]);
+  }, [normalizedQuotes, quotes.loading, search, selected]);
 
   const openQuote = (quote: Quote) => {
     setMessage(null);
@@ -84,7 +94,7 @@ export function QuotesPage() {
   const visible = useMemo(() => {
     const term = quoteSearch.trim().toLocaleLowerCase('es-MX');
     const start = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : 0;
-    return quotes.data
+    return normalizedQuotes
       .filter((quote) => {
         const clientName = clients.data.find((client) => client.id === quote.clientId)?.name ?? '';
         return (
@@ -109,7 +119,7 @@ export function QuotesPage() {
     creatorFilter,
     fromDate,
     quoteSearch,
-    quotes.data,
+    normalizedQuotes,
     sort,
     statusFilter,
   ]);
@@ -121,38 +131,36 @@ export function QuotesPage() {
     setMessage(null);
     try {
       const form = new FormData(event.currentTarget);
-      const request = validRequests.find((item) => item.id === String(form.get('requestId')));
-      if (!request) throw new Error('Selecciona una solicitud asignada o en progreso.');
-      const id = await createDocument(
-        'quotes',
-        {
-          folio: '',
-          requestId: request.id,
-          assignedTo: request.assignedTo ?? null,
-          clientId: request.clientId,
-          siteId: request.siteId,
-          equipmentId: request.equipmentId ?? null,
-          status: 'draft',
-          documentStatus: 'not_generated',
-          currency: 'MXN',
-          taxRate: 0.16,
-          discountDisplayMode: 'detailed',
-          subtotalOriginal: 0,
-          discountTotal: 0,
-          subtotalFinal: 0,
-          taxTotal: 0,
-          grandTotal: 0,
-          notes: '',
-          validityDays: 15,
-          validUntil: null,
-          issuedAt: null,
-          issuedBy: null,
-          originalQuoteId: null,
-          revisionNumber: 1,
-          locked: false,
-        },
-        profile.uid,
-      );
+      const requestId = String(form.get('requestId') ?? '').trim() || null;
+      const request = requestId ? validRequests.find((item) => item.id === requestId) : null;
+      const clientId = request?.clientId ?? String(form.get('clientId') ?? '');
+      const assignedTo =
+        request?.assignedTo ?? (String(form.get('assignedTo') ?? '').trim() || null);
+      const draft = createQuoteDraft({
+        actorId: profile.uid,
+        actorRole: profile.role,
+        clientId,
+        requestId,
+        assignedTo,
+        siteId: request?.siteId ?? (String(form.get('siteId') ?? '').trim() || null),
+        equipmentId: request?.equipmentId ?? (String(form.get('equipmentId') ?? '').trim() || null),
+        serviceReference: String(form.get('serviceReference') ?? ''),
+        technicalContext: String(form.get('technicalContext') ?? ''),
+      });
+      if (request && request.clientId !== clientId) {
+        throw new Error('La solicitud no coincide con el cliente seleccionado.');
+      }
+      const id = await createQuoteRecord({
+        actorId: profile.uid,
+        actorRole: profile.role,
+        clientId: draft.clientId,
+        requestId: draft.requestId,
+        assignedTo: draft.assignedTo,
+        siteId: draft.siteId,
+        equipmentId: draft.equipmentId,
+        serviceReference: draft.serviceReference,
+        technicalContext: draft.technicalContext,
+      });
       setCreating(false);
       await quotes.reload();
       const created = await getQuoteRecord(id);
@@ -270,7 +278,9 @@ export function QuotesPage() {
           ))}
         </div>
       </FilterBar>
-      {quotes.error ? (
+      {clients.data.length === 0 ? (
+        <MissingRequirements role={profile?.role} />
+      ) : quotes.error ? (
         <StatePanel kind="error" title="No fue posible cargar cotizaciones">
           <button className="button button--secondary" onClick={() => void quotes.reload()}>
             Reintentar
@@ -318,21 +328,88 @@ export function QuotesPage() {
           <QuoteCreationGuide />
           <form className="form-grid" onSubmit={(event) => void createQuote(event)}>
             <label className="field-wide">
-              Solicitud asignada o en progreso
-              <select name="requestId" required data-testid="quote-request">
+              Cliente
+              <select
+                name="clientId"
+                required
+                data-testid="quote-client"
+                value={creationClientId}
+                onChange={(event) => setCreationClientId(event.target.value)}
+              >
                 <option value="">Selecciona</option>
-                {validRequests.map((request) => (
-                  <option key={request.id} value={request.id}>
-                    {request.title}
+                {clients.data.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name}
                   </option>
                 ))}
               </select>
             </label>
-            {validRequests.length === 0 && <MissingRequirements role={profile?.role} />}
+            <label className="field-wide">
+              Solicitud (opcional)
+              <select name="requestId" data-testid="quote-request">
+                <option value="">Sin solicitud vinculada</option>
+                {validRequests
+                  .filter((request) => !creationClientId || request.clientId === creationClientId)
+                  .map((request) => (
+                    <option key={request.id} value={request.id}>
+                      {request.title}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label>
+              InstalaciÃ³n (opcional)
+              <select name="siteId">
+                <option value="">Sin instalaciÃ³n vinculada</option>
+                {sites.data
+                  .filter((site) => site.clientId === creationClientId)
+                  .map((site) => (
+                    <option key={site.id} value={site.id}>
+                      {site.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label>
+              Equipo (opcional)
+              <select name="equipmentId">
+                <option value="">Sin equipo vinculado</option>
+                {equipment.data
+                  .filter((item) => item.clientId === creationClientId)
+                  .map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label>
+              Referencia de servicio (opcional)
+              <input name="serviceReference" maxLength={500} />
+            </label>
+            <label>
+              Contexto tÃ©cnico (opcional)
+              <textarea name="technicalContext" maxLength={2000} />
+            </label>
+            {profile?.role === 'admin' && (
+              <label>
+                Operador asignado (opcional)
+                <select name="assignedTo">
+                  <option value="">Sin asignar</option>
+                  {users.data
+                    .filter((user) => user.role === 'operator' && user.status === 'active')
+                    .map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.displayName}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            )}
             {message && <p className="form-message form-message--error field-wide">{message}</p>}
             <button
               className="button button--primary field-wide"
-              disabled={busy || validRequests.length === 0}
+              disabled={busy || clients.data.length === 0}
             >
               {busy ? 'Creando…' : 'Crear cotización'}
             </button>
@@ -395,23 +472,23 @@ function QuoteCreationGuide() {
       <li>
         <span>2</span>
         <strong>Instalación</strong>
-        <small>Ligada al cliente</small>
+        <small>Opcional para cotizaciones independientes</small>
       </li>
       <li>
         <span>3</span>
         <strong>Solicitud</strong>
-        <small>Asignada o en progreso</small>
+        <small>Referencia de servicio opcional</small>
       </li>
       <li>
         <span>4</span>
         <strong>Equipo</strong>
-        <small>Opcional</small>
+        <small>Contexto tÃ©cnico, instalaciÃ³n y equipo opcionales</small>
       </li>
     </ol>
   );
 }
 
-function MissingRequirements({role}: {role: UserRole | undefined}) {
+export function MissingRequirements({role}: {role: UserRole | undefined}) {
   return (
     <section className="requirements-panel field-wide" role="status">
       <h3>Aún no puedes crear una cotización</h3>

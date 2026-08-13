@@ -112,6 +112,7 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
   await page.getByRole('button', {name: 'Iniciar solicitud'}).click();
   await page.getByRole('link', {name: 'Cotizaciones', exact: true}).click();
   await page.getByTestId('new-quote').click();
+  await page.getByTestId('quote-client').selectOption({label: clientName});
   await page.getByTestId('quote-request').selectOption({label: requestTitle});
   await page.getByRole('button', {name: 'Crear cotización'}).click();
 

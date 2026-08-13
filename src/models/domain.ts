@@ -173,11 +173,13 @@ export interface ServiceRequest extends AuditFields {
 export interface Quote extends AuditFields {
   id: string;
   folio: string;
-  requestId: string;
+  requestId?: string | null;
   assignedTo?: string | null;
   clientId: string;
-  siteId: string;
+  siteId?: string | null;
   equipmentId?: string | null;
+  serviceReference?: string | null;
+  technicalContext?: string | null;
   status: QuoteStatus;
   documentStatus: DocumentStatus;
   currency: 'MXN';
@@ -188,7 +190,7 @@ export interface Quote extends AuditFields {
   subtotalFinal: number;
   taxTotal: number;
   grandTotal: number;
-  notes?: string;
+  notes?: string | null;
   validityDays: number;
   validUntil?: Timestamp | null;
   issuedAt?: Timestamp | null;

@@ -574,6 +574,78 @@ describe('Firestore rules — quotes and line items', () => {
     );
   });
 
+  it('allows independent drafts with direct authorization and no request lookup', async () => {
+    const adminDb = environment.authenticatedContext('admin').firestore();
+    await assertSucceeds(
+      setDoc(doc(adminDb, 'quotes/independent-admin'), {
+        ...quote('admin', 'draft', false),
+        requestId: null,
+        assignedTo: null,
+        siteId: null,
+        equipmentId: null,
+        serviceReference: 'Orden 44',
+        technicalContext: 'Equipo norte',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        createdBy: 'admin',
+        updatedBy: 'admin',
+      }),
+    );
+    await assertSucceeds(
+      setDoc(doc(adminDb, 'quotes/independent-with-context'), {
+        ...quote('admin', 'draft', false),
+        requestId: null,
+        assignedTo: null,
+        siteId: 'site',
+        equipmentId: 'equipment',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        createdBy: 'admin',
+        updatedBy: 'admin',
+      }),
+    );
+    const operatorDb = environment.authenticatedContext('operator').firestore();
+    await assertFails(
+      setDoc(doc(operatorDb, 'quotes/independent-cross-client'), {
+        ...quote('operator', 'draft', false),
+        requestId: null,
+        assignedTo: null,
+        clientId: 'private',
+        siteId: 'private-site',
+        equipmentId: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        createdBy: 'operator',
+        updatedBy: 'operator',
+      }),
+    );
+
+    await assertSucceeds(
+      setDoc(doc(operatorDb, 'quotes/independent-operator'), {
+        ...quote('operator', 'draft', false),
+        requestId: null,
+        siteId: null,
+        equipmentId: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        createdBy: 'operator',
+        updatedBy: 'operator',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(operatorDb, 'quotes/independent-other'), {
+        ...quote('other', 'draft', false),
+        requestId: null,
+        siteId: null,
+        equipmentId: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        createdBy: 'operator',
+        updatedBy: 'operator',
+      }),
+    );
+  });
+
   it('blocks forged issuance and correction metadata on client-created drafts', async () => {
     const db = environment.authenticatedContext('operator').firestore();
     await assertFails(

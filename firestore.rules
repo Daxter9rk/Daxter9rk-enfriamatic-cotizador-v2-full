@@ -560,6 +560,12 @@ service cloud.firestore {
         && validMoney(data.taxTotal)
         && validMoney(data.grandTotal)
         && validOptionalString(data, 'notes', 4000)
+        && (!('serviceReference' in data)
+          || data.serviceReference == null
+          || (data.serviceReference is string && data.serviceReference.size() <= 500))
+        && (!('technicalContext' in data)
+          || data.technicalContext == null
+          || (data.technicalContext is string && data.technicalContext.size() <= 2000))
         && data.validityDays is int
         && data.validityDays >= 1 && data.validityDays <= 365;
     }
@@ -605,6 +611,7 @@ service cloud.firestore {
         && boundedList(100);
       allow create: if isActiveUser()
         && validInitialQuoteState(request.resource.data)
+        && request.resource.data.requestId != null
         && quoteMatchesRequest(request.resource.data)
         && (
           isAdmin()
@@ -615,6 +622,23 @@ service cloud.firestore {
           )
         )
         && validQuote(request.resource.data)
+        && validCreateAudit(request.resource.data);
+      allow create: if isActiveUser()
+        && validInitialQuoteState(request.resource.data)
+        && request.resource.data.requestId == null
+        && request.resource.data.clientId is string
+        && request.resource.data.clientId.size() > 0
+        && (isAdmin()
+          || request.auth.uid in get(
+            /databases/$(database)/documents/clients/$(request.resource.data.clientId)
+          ).data.operatorIds)
+        && (
+          isAdmin()
+          || (
+            isOperator()
+            && request.resource.data.assignedTo == request.auth.uid
+          )
+        )
         && validCreateAudit(request.resource.data);
       allow update: if isActiveUser()
         && canReadQuote(resource.data)

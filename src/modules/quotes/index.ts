@@ -14,5 +14,14 @@ export {
   roundMoney,
 } from './domain/calculations';
 export {createQuoteItemFromCatalog, snapshotCatalogItem} from './application/quoteItems';
-export {getQuoteRecord} from './infrastructure/quoteRecords';
+export {
+  createQuoteDraft,
+  updateQuoteDraft,
+  validateQuoteDraft,
+  type CreateQuoteDraftInput,
+  type QuoteDraftValidationStage,
+  type QuoteDraftWrite,
+} from './application/quoteDrafts';
+export {createQuoteRecord, getQuoteRecord, updateQuoteRecord} from './infrastructure/quoteRecords';
 export {quoteStatusLabel} from './ui/quoteLabels';
+export {normalizeQuoteRecord} from './domain/normalizeQuoteRecord';
