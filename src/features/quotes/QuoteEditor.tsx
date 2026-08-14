@@ -163,12 +163,6 @@ export function QuoteEditor({
   };
 
   const issue = async () => {
-    if (!quote.requestId) {
-      setMessage(
-        'Esta cotizaciÃ³n puede guardarse y revisarse. La emisiÃ³n se habilitarÃ¡ en una etapa posterior.',
-      );
-      return;
-    }
     setBusy(true);
     setMessage(null);
     try {
@@ -391,11 +385,11 @@ export function QuoteEditor({
                 {quote.status === 'draft' && (
                   <button
                     className="button button--primary"
-                    disabled={busy || items.length === 0 || !quote.requestId}
+                    disabled={busy || items.length === 0}
                     onClick={() => void issue()}
                     data-testid="issue-quote"
                   >
-                    {quote.requestId
+                    {quote.requestId !== undefined
                       ? busy
                         ? 'Procesando…'
                         : 'Generar PDF y emitir'
