@@ -434,6 +434,13 @@ export function QuotesPage() {
             await quotes.reload();
             setSelected(await getQuoteRecord(selected.id));
           }}
+          onCorrectionCreated={async (quoteId) => {
+            await quotes.reload();
+            const created = await getQuoteRecord(quoteId);
+            if (created) {
+              openQuote(created);
+            }
+          }}
         />
       )}
     </>

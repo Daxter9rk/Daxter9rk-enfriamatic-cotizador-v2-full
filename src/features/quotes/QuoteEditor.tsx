@@ -42,6 +42,14 @@ interface DownloadResult {
   fileName: string;
 }
 
+interface CorrectionResult {
+  quoteId: string;
+  requestId: string | null;
+  folio: string;
+  revisionNumber: number;
+  idempotent: boolean;
+}
+
 export function QuoteEditor({
   quote,
   profileId,
@@ -52,6 +60,7 @@ export function QuoteEditor({
   equipment,
   onClose,
   onChanged,
+  onCorrectionCreated,
 }: {
   quote: Quote;
   profileId: string;
@@ -62,6 +71,7 @@ export function QuoteEditor({
   equipment: Equipment | undefined;
   onClose(): void;
   onChanged(): Promise<void>;
+  onCorrectionCreated?(quoteId: string): Promise<void>;
 }) {
   const [items, setItems] = useState<QuoteItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -228,11 +238,16 @@ export function QuoteEditor({
 
   const correction = async () => {
     setBusy(true);
+    setMessage(null);
     try {
-      await callFunction('createCorrection', {quoteId: quote.id});
-      setMessage('Corrección creada con una nueva solicitud y cotización relacionadas.');
-    } catch {
-      setMessage('No se pudo crear la corrección.');
+      const result = await callFunction<
+        {quoteId: string; idempotencyKey: string},
+        CorrectionResult
+      >('createCorrection', {quoteId: quote.id, idempotencyKey: crypto.randomUUID()});
+      if (onCorrectionCreated) await onCorrectionCreated(result.quoteId);
+      else setMessage(`Se creó la revisión ${result.revisionNumber} como borrador editable.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo crear la corrección.');
     } finally {
       setBusy(false);
     }
