@@ -11,6 +11,19 @@ describe('quote draft application use cases', () => {
     expect(base.assignedTo).toBeNull();
   });
 
+  it('forces null relations when an independent input contains operational ids', () => {
+    const draft = createQuoteDraft({
+      clientId: 'client-1',
+      actorId: 'admin-1',
+      actorRole: 'admin',
+      siteId: 'site-1',
+      equipmentId: 'equipment-1',
+    });
+    expect(draft.requestId).toBeNull();
+    expect(draft.siteId).toBeNull();
+    expect(draft.equipmentId).toBeNull();
+  });
+
   it('auto-assigns an independent operator draft and rejects another assignee', () => {
     const draft = createQuoteDraft({
       clientId: 'client-1',

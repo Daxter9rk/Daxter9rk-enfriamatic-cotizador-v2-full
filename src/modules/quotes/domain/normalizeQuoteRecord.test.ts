@@ -63,4 +63,13 @@ describe('normalizeQuoteRecord', () => {
     expect(quote.serviceReference).toBe('Orden 44');
     expect(quote.technicalContext).toBe('Equipo norte');
   });
+
+  it('does not erase unexpected independent references during read', () => {
+    const quote = normalizeQuoteRecord(
+      rawQuote({requestId: null, siteId: 'site-1', equipmentId: 'equipment-1'}),
+    );
+    expect(quote.requestId).toBeNull();
+    expect(quote.siteId).toBe('site-1');
+    expect(quote.equipmentId).toBe('equipment-1');
+  });
 });

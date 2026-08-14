@@ -23,8 +23,8 @@ describe('QuotesPage independent creation', () => {
     await user.click(screen.getByRole('button', {name: 'Nueva cotización'}));
     expect(screen.getByTestId('quote-client')).toBeRequired();
     expect(screen.getByTestId('quote-request')).not.toBeRequired();
-    expect(screen.getByRole('combobox', {name: /Instalaci/})).not.toBeRequired();
-    expect(screen.getByRole('combobox', {name: /Equipo/})).not.toBeRequired();
+    expect(screen.queryByRole('combobox', {name: /Instalaci/})).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', {name: /Equipo/})).not.toBeInTheDocument();
     expect(screen.getByLabelText(/Referencia de servicio/)).toBeVisible();
   });
 });
