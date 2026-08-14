@@ -160,8 +160,8 @@ export function QuotesPage() {
         assignedTo: draft.assignedTo,
         siteId: draft.siteId,
         equipmentId: draft.equipmentId,
-        serviceReference: draft.serviceReference,
-        technicalContext: draft.technicalContext,
+        serviceReference: draft.serviceReference ?? null,
+        technicalContext: draft.technicalContext ?? null,
       });
       setCreating(false);
       await quotes.reload();

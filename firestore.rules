@@ -618,35 +618,39 @@ service cloud.firestore {
         && canReadQuote(resource.data)
         && boundedList(100);
       allow create: if isActiveUser()
-        && validInitialQuoteState(request.resource.data)
-        && request.resource.data.requestId != null
-        && quoteMatchesRequest(request.resource.data)
         && (
-          isAdmin()
-          || (
-            isOperator()
-            && request.resource.data.assignedTo == request.auth.uid
-            && requestAssignedToActor(request.resource.data.requestId)
+          (
+            request.resource.data.requestId != null
+            && validInitialQuoteState(request.resource.data)
+            && quoteMatchesRequest(request.resource.data)
+            && (
+              isAdmin()
+              || (
+                isOperator()
+                && request.resource.data.assignedTo == request.auth.uid
+              )
+            )
+            && validQuote(request.resource.data)
+            && validCreateAudit(request.resource.data)
           )
-        )
-        && validQuote(request.resource.data)
-        && validCreateAudit(request.resource.data);
-      allow create: if isActiveUser()
-        && request.resource.data.requestId == null
-        && validInitialQuoteState(request.resource.data)
-        && validIndependentQuote(request.resource.data)
-        && (isAdmin()
-          || request.auth.uid in get(
-            /databases/$(database)/documents/clients/$(request.resource.data.clientId)
-          ).data.operatorIds)
-        && (
-          isAdmin()
           || (
-            isOperator()
-            && request.resource.data.assignedTo == request.auth.uid
+            request.resource.data.requestId == null
+            && validInitialQuoteState(request.resource.data)
+            && validIndependentQuote(request.resource.data)
+            && (isAdmin()
+              || request.auth.uid in get(
+                /databases/$(database)/documents/clients/$(request.resource.data.clientId)
+              ).data.operatorIds)
+            && (
+              isAdmin()
+              || (
+                isOperator()
+                && request.resource.data.assignedTo == request.auth.uid
+              )
+            )
+            && validCreateAudit(request.resource.data)
           )
-        )
-        && validCreateAudit(request.resource.data);
+        );
       allow update: if isActiveUser()
         && canReadQuote(resource.data)
         && resource.data.status == 'draft'
