@@ -162,6 +162,8 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
   await expect(page.getByText(/corrección creada/i)).toBeVisible({timeout: 15_000});
   await page.getByRole('dialog').getByRole('button', {name: 'Cerrar', exact: true}).click();
   await page.getByRole('link', {name: 'Actividad', exact: true}).click();
+  const loadMoreAudit = page.getByRole('button', {name: /Cargar 50 eventos/});
+  if (await loadMoreAudit.isVisible()) await loadMoreAudit.click();
   await expect(page.getByText(/marcó como enviada la cotización/i)).toBeVisible();
   await expect(page.getByText(/aceptó la cotización/i)).toBeVisible();
   await expect

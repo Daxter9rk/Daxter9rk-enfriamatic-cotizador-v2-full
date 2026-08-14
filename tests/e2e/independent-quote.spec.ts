@@ -31,24 +31,24 @@ test('admin creates, edits, previews and reloads an independent quote', async ({
   await page.locator('select[name="assignedTo"]').selectOption('seed-operator-active');
   await page.getByRole('button', {name: 'Crear cotización'}).click();
 
-  await expect(page.getByTestId('issue-quote')).toBeDisabled();
   await page.getByRole('button', {name: 'Agregar Compresor emulador'}).click();
   await page.locator('form.quote-context-form button').click();
-  await expect(page.locator('input[name="serviceReference"]')).toHaveValue(
-    'Servicio preventivo independiente',
-  );
   await page.getByRole('button', {name: 'Vista previa'}).click();
   await expect(page.getByRole('dialog')).toContainText('Procesos Fríos del Bajío');
   await page.getByRole('button', {name: 'Cerrar vista previa'}).click();
+  await expect(page.getByTestId('issue-quote')).toBeEnabled();
+  await page.getByTestId('issue-quote').click();
+  await expect(page.getByRole('dialog').getByText('Emitida', {exact: true}).first()).toBeVisible();
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', {name: 'Descargar PDF'}).click();
+  expect((await download).suggestedFilename()).toMatch(/\.pdf$/);
 
   await page.reload({waitUntil: 'domcontentloaded'});
-  await expect(page.locator('input[name="serviceReference"]')).toHaveValue(
-    'Servicio preventivo independiente',
-  );
-  await expect(page.locator('textarea[name="technicalContext"]')).toHaveValue(
-    'Contexto técnico capturado como texto.',
-  );
-  await expect(page.getByTestId('issue-quote')).toBeDisabled();
+  await expect(page.getByRole('dialog').getByText('Emitida', {exact: true}).first()).toBeVisible();
+  await expect(page.locator('form.quote-context-form')).toHaveCount(0);
+  await page.getByRole('button', {name: 'Vista previa'}).click();
+  await expect(page.getByRole('dialog')).toContainText('Servicio preventivo independiente');
+  await expect(page.getByRole('dialog')).toContainText('Contexto técnico capturado como texto.');
 });
 
 test('operator creates an independent quote assigned to self and cannot reassign it', async ({
@@ -58,8 +58,14 @@ test('operator creates an independent quote assigned to self and cannot reassign
   await openIndependentQuote(page);
   await page.getByRole('button', {name: 'Crear cotización'}).click();
 
-  await expect(page.getByTestId('issue-quote')).toBeDisabled();
   await expect(page.locator('select[name="assignedTo"]')).toHaveCount(0);
+  await page.getByRole('button', {name: 'Agregar Compresor emulador'}).click();
+  await expect(page.getByTestId('issue-quote')).toBeEnabled();
+  await page.getByTestId('issue-quote').click();
+  await expect(page.getByRole('dialog').getByText('Emitida', {exact: true}).first()).toBeVisible();
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', {name: 'Descargar PDF'}).click();
+  expect((await download).suggestedFilename()).toMatch(/\.pdf$/);
   await page.getByRole('button', {name: 'Vista previa'}).click();
   await expect(page.getByRole('dialog')).toContainText('Procesos Fríos del Bajío');
 });
