@@ -632,8 +632,8 @@ service cloud.firestore {
         && validQuote(request.resource.data)
         && validCreateAudit(request.resource.data);
       allow create: if isActiveUser()
-        && validInitialQuoteState(request.resource.data)
         && request.resource.data.requestId == null
+        && validInitialQuoteState(request.resource.data)
         && validIndependentQuote(request.resource.data)
         && (isAdmin()
           || request.auth.uid in get(

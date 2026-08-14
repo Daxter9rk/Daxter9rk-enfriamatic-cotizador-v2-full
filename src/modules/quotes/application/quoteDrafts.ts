@@ -19,8 +19,8 @@ export interface QuoteDraftWrite {
   clientId: string;
   siteId: string | null;
   equipmentId: string | null;
-  serviceReference: string | null;
-  technicalContext: string | null;
+  serviceReference?: string | null;
+  technicalContext?: string | null;
   status: 'draft';
   documentStatus: 'not_generated';
   currency: 'MXN';
@@ -62,8 +62,12 @@ export function createQuoteDraft(input: CreateQuoteDraftInput): QuoteDraftWrite 
     clientId,
     siteId: requestId ? clean(input.siteId) : null,
     equipmentId: requestId ? clean(input.equipmentId) : null,
-    serviceReference: clean(input.serviceReference),
-    technicalContext: clean(input.technicalContext),
+    ...(requestId
+      ? {}
+      : {
+          serviceReference: clean(input.serviceReference),
+          technicalContext: clean(input.technicalContext),
+        }),
     status: 'draft',
     documentStatus: 'not_generated',
     currency: 'MXN',
