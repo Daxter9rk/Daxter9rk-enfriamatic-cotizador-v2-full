@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import type {QuoteDocumentModel} from './quoteDocumentModel';
 
 interface PdfItem {
   quantity: number;
@@ -17,8 +18,11 @@ export interface QuotePdfInput {
   clientName: string;
   clientLegalName?: string;
   clientRfc?: string;
-  siteName: string;
-  siteAddress: string;
+  siteName?: string;
+  siteAddress?: string;
+  serviceReference?: string;
+  technicalContext?: string;
+  operationalMode?: 'historical' | 'independent';
   equipmentName?: string;
   items: PdfItem[];
   discountDisplayMode: 'detailed' | 'summary' | 'incorporated';
@@ -73,7 +77,10 @@ function drawTableHeader(document: PDFKit.PDFDocument, y: number): void {
   document.y += 9;
 }
 
-export async function generateQuotePdf(input: QuotePdfInput): Promise<GeneratedPdf> {
+export async function generateQuotePdf(
+  source: QuotePdfInput | QuoteDocumentModel,
+): Promise<GeneratedPdf> {
+  const input = toPdfInput(source);
   const document = new PDFDocument({
     size: 'LETTER',
     margins: {top: 44, right: 44, bottom: 52, left: 44},
@@ -126,12 +133,28 @@ export async function generateQuotePdf(input: QuotePdfInput): Promise<GeneratedP
     .text('INSTALACIÓN / EQUIPO', 310, 132)
     .fillColor('#17242B')
     .fontSize(10)
-    .text(input.siteName, 310, 146)
+    .text(input.siteName || input.equipmentName || input.serviceReference || '', 310, 146)
     .fontSize(8)
     .fillColor('#647680')
     .text([input.siteAddress, input.equipmentName].filter(Boolean).join(' · '), 310, 163, {
       width: 240,
     });
+
+  if (input.operationalMode === 'independent') {
+    document
+      .fillColor('#F4F7F9')
+      .rect(300, 125, 260, 55)
+      .fill()
+      .fillColor('#02557B')
+      .fontSize(8)
+      .text('CONTEXTO OPERATIVO', 310, 132)
+      .fillColor('#17242B')
+      .fontSize(9)
+      .text(input.serviceReference || '', 310, 146)
+      .fillColor('#647680')
+      .fontSize(8)
+      .text(input.technicalContext || '', 310, 160, {width: 240});
+  }
 
   drawTableHeader(document, 220);
   let tableY = document.y;
@@ -282,4 +305,40 @@ export async function generateQuotePdf(input: QuotePdfInput): Promise<GeneratedP
   });
   document.end();
   return {bytes: await completion, pageCount: range.count};
+}
+
+function toPdfInput(source: QuotePdfInput | QuoteDocumentModel): QuotePdfInput {
+  if ('identity' in source) {
+    const context = source.operationalContext;
+    return {
+      folio: source.identity.folio,
+      issuedAt: source.identity.issuedAt,
+      clientName: source.client.name,
+      clientLegalName: source.client.legalName ?? undefined,
+      clientRfc: source.client.rfc ?? undefined,
+      siteName: context.siteName ?? undefined,
+      siteAddress: context.siteAddress ?? undefined,
+      equipmentName: context.equipmentName ?? undefined,
+      serviceReference: context.serviceReference ?? undefined,
+      technicalContext: context.technicalContext ?? undefined,
+      operationalMode: source.mode,
+      items: source.items.map((item) => ({
+        ...item,
+        brand: item.brand ?? undefined,
+        model: item.model ?? undefined,
+      })),
+      discountDisplayMode: source.terms.discountDisplayMode,
+      ...source.totals,
+      taxRate: source.terms.taxRate,
+      currency: source.identity.currency,
+      validityDays: source.identity.validityDays,
+      notes: source.terms.notes ?? undefined,
+      paymentMethod: source.company.paymentMethod ?? undefined,
+      warranty: source.company.warranty ?? undefined,
+      exclusions: source.company.exclusions ?? undefined,
+      legalText: source.company.legalText ?? undefined,
+      watermark: source.company.watermark,
+    };
+  }
+  return source;
 }
