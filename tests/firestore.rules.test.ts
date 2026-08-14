@@ -591,7 +591,7 @@ describe('Firestore rules — quotes and line items', () => {
         updatedBy: 'admin',
       }),
     );
-    await assertSucceeds(
+    await assertFails(
       setDoc(doc(adminDb, 'quotes/independent-with-context'), {
         ...quote('admin', 'draft', false),
         requestId: null,

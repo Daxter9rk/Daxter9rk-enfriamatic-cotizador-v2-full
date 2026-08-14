@@ -604,6 +604,14 @@ service cloud.firestore {
         ]);
     }
 
+    function validIndependentQuote(data) {
+      return data.requestId == null
+        && data.siteId == null
+        && data.equipmentId == null
+        && data.clientId is string
+        && data.clientId.size() > 0;
+    }
+
     match /quotes/{quoteId} {
       allow get: if isActiveUser() && canReadQuote(resource.data);
       allow list: if isActiveUser()
@@ -626,8 +634,7 @@ service cloud.firestore {
       allow create: if isActiveUser()
         && validInitialQuoteState(request.resource.data)
         && request.resource.data.requestId == null
-        && request.resource.data.clientId is string
-        && request.resource.data.clientId.size() > 0
+        && validIndependentQuote(request.resource.data)
         && (isAdmin()
           || request.auth.uid in get(
             /databases/$(database)/documents/clients/$(request.resource.data.clientId)
