@@ -6,13 +6,14 @@ const optionalReference = (value: string | null | undefined): string | null => {
 };
 
 export function normalizeQuoteRecord(raw: Quote): Quote {
+  const requestId = optionalReference(raw.requestId);
   const normalized = Object.fromEntries(
     Object.entries(raw).filter(([, value]) => value !== undefined),
   ) as Quote;
 
   return {
     ...normalized,
-    requestId: optionalReference(raw.requestId),
+    requestId,
     siteId: optionalReference(raw.siteId),
     equipmentId: optionalReference(raw.equipmentId),
     assignedTo: optionalReference(raw.assignedTo),

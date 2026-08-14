@@ -48,6 +48,7 @@ const clean = (value: string | null | undefined): string | null => {
 
 export function createQuoteDraft(input: CreateQuoteDraftInput): QuoteDraftWrite {
   const clientId = input.clientId.trim();
+  const requestId = clean(input.requestId);
   if (!clientId) throw new Error('El cliente es obligatorio.');
   const assignedTo =
     clean(input.assignedTo) ?? (input.actorRole === 'operator' ? input.actorId : null);
@@ -56,11 +57,11 @@ export function createQuoteDraft(input: CreateQuoteDraftInput): QuoteDraftWrite 
   }
   return {
     folio: '',
-    requestId: clean(input.requestId),
+    requestId,
     assignedTo,
     clientId,
-    siteId: clean(input.siteId),
-    equipmentId: clean(input.equipmentId),
+    siteId: requestId ? clean(input.siteId) : null,
+    equipmentId: requestId ? clean(input.equipmentId) : null,
     serviceReference: clean(input.serviceReference),
     technicalContext: clean(input.technicalContext),
     status: 'draft',
@@ -108,6 +109,9 @@ export function validateQuoteDraft(quote: Quote, stage: QuoteDraftValidationStag
   if (!quote.clientId) errors.push('El cliente es obligatorio.');
   if (quote.status !== 'draft' || quote.locked)
     errors.push('La cotización no es un borrador editable.');
+  if (!quote.requestId && (quote.siteId != null || quote.equipmentId != null)) {
+    errors.push('Una cotizacion independiente no puede vincular instalacion o equipo.');
+  }
   if (stage === 'issue' && !quote.requestId) {
     errors.push('Las cotizaciones independientes no pueden emitirse en este hito.');
   }

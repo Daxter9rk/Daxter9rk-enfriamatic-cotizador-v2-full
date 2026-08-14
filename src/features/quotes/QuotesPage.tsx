@@ -52,6 +52,7 @@ export function QuotesPage() {
   const [selected, setSelected] = useState<Quote | null>(null);
   const [creating, setCreating] = useState(false);
   const [creationClientId, setCreationClientId] = useState('');
+  const [creationRequestId, setCreationRequestId] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [quoteSearch, setQuoteSearch] = useState('');
   const [clientFilter, setClientFilter] = useState('all');
@@ -91,6 +92,7 @@ export function QuotesPage() {
   const validRequests = requests.data.filter((request) =>
     ['assigned', 'in_progress'].includes(request.status),
   );
+  const creationRequest = validRequests.find((request) => request.id === creationRequestId);
   const visible = useMemo(() => {
     const term = quoteSearch.trim().toLocaleLowerCase('es-MX');
     const start = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : 0;
@@ -185,7 +187,11 @@ export function QuotesPage() {
         actions={
           <button
             className="button button--primary"
-            onClick={() => setCreating(true)}
+            onClick={() => {
+              setCreationClientId('');
+              setCreationRequestId('');
+              setCreating(true);
+            }}
             data-testid="new-quote"
           >
             Nueva cotización
@@ -346,7 +352,17 @@ export function QuotesPage() {
             </label>
             <label className="field-wide">
               Solicitud (opcional)
-              <select name="requestId" data-testid="quote-request">
+              <select
+                name="requestId"
+                data-testid="quote-request"
+                value={creationRequestId}
+                onChange={(event) => {
+                  const requestId = event.target.value;
+                  const request = validRequests.find((item) => item.id === requestId);
+                  setCreationRequestId(requestId);
+                  if (request) setCreationClientId(request.clientId);
+                }}
+              >
                 <option value="">Sin solicitud vinculada</option>
                 {validRequests
                   .filter((request) => !creationClientId || request.clientId === creationClientId)
@@ -357,32 +373,20 @@ export function QuotesPage() {
                   ))}
               </select>
             </label>
-            <label>
-              InstalaciÃ³n (opcional)
-              <select name="siteId">
-                <option value="">Sin instalaciÃ³n vinculada</option>
-                {sites.data
-                  .filter((site) => site.clientId === creationClientId)
-                  .map((site) => (
-                    <option key={site.id} value={site.id}>
-                      {site.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label>
-              Equipo (opcional)
-              <select name="equipmentId">
-                <option value="">Sin equipo vinculado</option>
-                {equipment.data
-                  .filter((item) => item.clientId === creationClientId)
-                  .map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
+            {creationRequest ? (
+              <section className="field-wide quote-link-summary" aria-label="Cotización vinculada">
+                <strong>Cotización vinculada a solicitud</strong>
+                <span>Instalación y equipo se derivan de la solicitud.</span>
+              </section>
+            ) : (
+              <section
+                className="field-wide quote-link-summary"
+                aria-label="Cotización independiente"
+              >
+                <strong>Cotización independiente</strong>
+                <span>Se guardará sin Instalación ni Equipo vinculados.</span>
+              </section>
+            )}
             <label>
               Referencia de servicio (opcional)
               <input name="serviceReference" maxLength={500} />
