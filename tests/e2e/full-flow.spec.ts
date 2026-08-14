@@ -116,8 +116,8 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
   await page.getByTestId('quote-request').selectOption({label: requestTitle});
   await page.getByRole('button', {name: 'Crear cotización'}).click();
 
-  await page.getByRole('button', {name: `Agregar ${productName}`}).click();
-  await page.getByRole('button', {name: `Agregar ${serviceName}`}).click();
+  await page.getByRole('button', {name: 'Agregar Compresor emulador'}).click();
+  await page.getByRole('button', {name: 'Agregar Servicio emulador'}).click();
   await page.getByRole('button', {name: 'Editar'}).first().click();
   await page.getByTestId('quote-item-description').fill(`${productName} ajustado en partida`);
   await page.getByRole('button', {name: 'Guardar cambios de partida'}).click();

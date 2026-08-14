@@ -9,13 +9,13 @@ Aceptado para el Hito 2.
 `Quote` soporta dos modalidades en el mismo agregado:
 
 - histórica: `requestId`, `siteId` y la asignación conservan la trazabilidad de la solicitud;
-- independiente: `requestId` es `null`, el cliente es obligatorio y la instalación, el equipo, la referencia de servicio y el contexto técnico son opcionales.
+- independiente: `requestId`, `siteId` y `equipmentId` son `null`, el cliente es obligatorio y la referencia de servicio y el contexto técnico son opcionales.
 
 Los borradores independientes se crean y editan desde la aplicación, permanecen en `draft`/`not_generated` y no pueden invocar la emisión. La emisión histórica continúa usando las Functions existentes y no se modifica su contrato.
 
 ## Autorización
 
-Las reglas conservan la rama histórica y agregan una rama independiente: administradores pueden crear; operadores solo pueden crear cuando el cliente está en su ACL. La aplicación limita instalación y equipo a la selección del cliente; la validación del registro histórico no incorpora los nuevos campos para conservar el margen del evaluador de reglas y la rama independiente mantiene una validación compacta por el límite de expresiones del emulador.
+Las reglas conservan la rama histórica y agregan una rama independiente: administradores pueden crear; operadores solo pueden crear cuando el cliente está en su ACL. La rama independiente comprueba directamente las tres referencias nulas y no consulta Solicitud, Instalación ni Equipo. La aplicación y la UI impiden agregar relaciones posteriormente; la normalización conserva referencias históricas durante la lectura.
 
 ## Consecuencias
 
