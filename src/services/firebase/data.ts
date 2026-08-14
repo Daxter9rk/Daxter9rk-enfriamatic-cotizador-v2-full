@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  documentId,
   deleteDoc,
   doc,
   getDoc,
@@ -9,6 +10,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  startAfter,
   setDoc,
   updateDoc,
   where,
@@ -42,6 +44,44 @@ export async function listDocuments<T>(
   const ref = collection(db, collectionName);
   const snapshot = await getDocs(query(ref, ...constraints, limit(pageSize)));
   return snapshot.docs.map((item) => ({id: item.id, ...item.data()}) as T & {id: string});
+}
+
+export interface AuditLogCursor {
+  createdAt: unknown;
+  id: string;
+}
+
+export interface AuditLogPage<T> {
+  data: Array<T & {id: string}>;
+  cursor: AuditLogCursor | null;
+  hasMore: boolean;
+}
+
+export async function listAuditLogs<T>(
+  constraints: QueryConstraint[] = [],
+  pageSize = 50,
+  cursor?: AuditLogCursor | null,
+): Promise<AuditLogPage<T>> {
+  const ref = collection(db, 'auditLogs');
+  const cursorConstraint = cursor ? [startAfter(cursor.createdAt, cursor.id)] : [];
+  const snapshot = await getDocs(
+    query(
+      ref,
+      ...constraints,
+      orderBy('createdAt', 'desc'),
+      orderBy(documentId(), 'desc'),
+      ...cursorConstraint,
+      limit(pageSize),
+    ),
+  );
+  const data = snapshot.docs.map((item) => ({id: item.id, ...item.data()}) as T & {id: string});
+  const last = snapshot.docs.at(-1);
+  const lastData = last ? (last.data() as {createdAt: AuditLogCursor['createdAt']}) : null;
+  return {
+    data,
+    cursor: last && lastData ? {createdAt: lastData.createdAt, id: last.id} : null,
+    hasMore: snapshot.size === pageSize,
+  };
 }
 
 export async function getDocument<T>(collectionName: string, id: string): Promise<T | null> {

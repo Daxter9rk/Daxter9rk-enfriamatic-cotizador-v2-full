@@ -4,6 +4,7 @@ import {useAuth} from '../../app/providers/AuthProvider';
 import {FilterBar} from '../../components/FilterBar';
 import {PageHeader} from '../../components/PageHeader';
 import {StatePanel} from '../../components/StatePanel';
+import {useAuditCollection} from '../../hooks/useAuditCollection';
 import {useCollection} from '../../hooks/useCollection';
 import type {AuditLog, UserProfile} from '../../models/domain';
 import {constraints} from '../../services/firebase/data';
@@ -19,7 +20,6 @@ type DatePreset = 'today' | 'yesterday' | '7d' | '30d' | 'custom';
 
 export function ActivityPage() {
   const {profile} = useAuth();
-  const [pageSize, setPageSize] = useState(50);
   const [preset, setPreset] = useState<DatePreset>('7d');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -30,10 +30,8 @@ export function ActivityPage() {
   const [result, setResult] = useState('all');
   const [sort, setSort] = useState('newest');
   const [search, setSearch] = useState('');
-  const audit = useCollection<AuditLog>(
-    'auditLogs',
+  const audit = useAuditCollection<AuditLog>(
     profile?.role === 'operator' ? [constraints.auditFor(profile.uid)] : [],
-    pageSize,
   );
   const users = useCollection<UserProfile>('users', [], 100, profile?.role === 'admin');
   const userMap = useMemo(
@@ -68,11 +66,16 @@ export function ActivityPage() {
               .includes(term))
         );
       })
-      .sort((left, right) =>
-        sort === 'oldest'
-          ? (left.createdAt?.toMillis?.() ?? 0) - (right.createdAt?.toMillis?.() ?? 0)
-          : (right.createdAt?.toMillis?.() ?? 0) - (left.createdAt?.toMillis?.() ?? 0),
-      );
+      .sort((left, right) => {
+        const timestampDifference =
+          (left.createdAt?.toMillis?.() ?? 0) - (right.createdAt?.toMillis?.() ?? 0);
+        if (timestampDifference !== 0) {
+          return sort === 'oldest' ? timestampDifference : -timestampDifference;
+        }
+        return sort === 'oldest'
+          ? left.id.localeCompare(right.id)
+          : right.id.localeCompare(left.id);
+      });
   }, [action, actor, audit.data, from, preset, resource, result, role, search, sort, to, userMap]);
 
   if (audit.loading && audit.data.length === 0)
@@ -219,16 +222,18 @@ export function ActivityPage() {
               ))}
             </div>
           )}
-          {audit.data.length >= pageSize && pageSize < 200 && (
+          {audit.hasMore && (
             <button
               className="button button--secondary load-more"
-              onClick={() => setPageSize((value) => Math.min(value + 50, 200))}
+              onClick={() => void audit.loadMore()}
+              disabled={audit.loading}
             >
               Cargar 50 eventos más
             </button>
           )}
           <p className="pagination-note">
-            Se consultan hasta {pageSize} registros; aplica filtros antes de ampliar el límite.
+            Se consultan páginas de 50 registros ordenadas de forma estable; aplica filtros antes de
+            ampliar el límite.
           </p>
         </section>
       )}
