@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import {HttpsError, onCall} from 'firebase-functions/v2/https';
 import {firestore, storage} from '../shared/admin';
 import {requireActiveActor} from '../shared/auth';
@@ -33,21 +34,30 @@ export const downloadQuotePdf = onCall(
       throw new HttpsError('failed-precondition', 'The quote PDF is not ready.');
     }
 
-    const requestSnapshot = await firestore.doc(`requests/${String(quote.requestId)}`).get();
-    const serviceRequest = requestSnapshot.data() ?? {};
-    if (
-      !requestSnapshot.exists ||
-      quote.clientId !== serviceRequest.clientId ||
-      quote.siteId !== serviceRequest.siteId ||
-      (quote.equipmentId ?? null) !== (serviceRequest.equipmentId ?? null)
-    ) {
-      throw new HttpsError('data-loss', 'The quote does not match its related request.');
-    }
-    if (
-      actor.role === 'operator' &&
-      (quote.assignedTo !== actor.uid || serviceRequest.assignedTo !== actor.uid)
-    ) {
-      throw new HttpsError('permission-denied', 'The document is not assigned to this operator.');
+    if (quote.requestId == null) {
+      if (quote.siteId != null || quote.equipmentId != null) {
+        throw new HttpsError('data-loss', 'The independent quote contains operational references.');
+      }
+      if (actor.role === 'operator' && quote.assignedTo !== actor.uid) {
+        throw new HttpsError('permission-denied', 'The document is not assigned to this operator.');
+      }
+    } else {
+      const requestSnapshot = await firestore.doc(`requests/${String(quote.requestId)}`).get();
+      const serviceRequest = requestSnapshot.data() ?? {};
+      if (
+        !requestSnapshot.exists ||
+        quote.clientId !== serviceRequest.clientId ||
+        quote.siteId !== serviceRequest.siteId ||
+        (quote.equipmentId ?? null) !== (serviceRequest.equipmentId ?? null)
+      ) {
+        throw new HttpsError('data-loss', 'The quote does not match its related request.');
+      }
+      if (
+        actor.role === 'operator' &&
+        (quote.assignedTo !== actor.uid || serviceRequest.assignedTo !== actor.uid)
+      ) {
+        throw new HttpsError('permission-denied', 'The document is not assigned to this operator.');
+      }
     }
 
     if (
@@ -66,7 +76,13 @@ export const downloadQuotePdf = onCall(
     }
 
     const [bytes] = await storage.bucket().file(document.storagePath).download();
-    if (bytes.length > MAX_DOWNLOAD_BYTES || bytes.subarray(0, 5).toString('ascii') !== '%PDF-') {
+    const hash = createHash('sha256').update(bytes).digest('hex');
+    if (
+      bytes.length > MAX_DOWNLOAD_BYTES ||
+      bytes.subarray(0, 5).toString('ascii') !== '%PDF-' ||
+      (typeof document.sizeBytes === 'number' && document.sizeBytes !== bytes.length) ||
+      (typeof document.sha256 === 'string' && document.sha256 !== hash)
+    ) {
       throw new HttpsError('data-loss', 'The stored document is not a PDF.');
     }
     return {
