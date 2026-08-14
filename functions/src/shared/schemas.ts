@@ -25,6 +25,7 @@ export const issueQuoteSchema = z.object({
 
 export const quoteIdSchema = z.object({
   quoteId: z.string().min(1).max(128),
+  idempotencyKey: z.string().uuid().optional(),
 });
 
 export const transitionQuoteSchema = z

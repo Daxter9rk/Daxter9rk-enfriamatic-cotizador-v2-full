@@ -33,6 +33,14 @@
       ]
     },
     {
+      "collectionGroup": "quotes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "originalQuoteId", "order": "ASCENDING"},
+        {"fieldPath": "revisionNumber", "order": "DESCENDING"}
+      ]
+    },
+    {
       "collectionGroup": "notifications",
       "queryScope": "COLLECTION",
       "fields": [
