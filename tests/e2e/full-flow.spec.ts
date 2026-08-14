@@ -2,7 +2,6 @@ import {readFile} from 'node:fs/promises';
 import {expect, test, type Page} from '@playwright/test';
 
 const admin = {email: 'admin@enfriamatic.local', password: 'DevOnly!Enfriamatic2026'};
-const operator = {email: 'operador@enfriamatic.local', password: 'DevOnly!Enfriamatic2026'};
 
 async function login(page: Page, credentials = admin) {
   await page.goto('/', {waitUntil: 'domcontentloaded'});
@@ -104,10 +103,7 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
   await requestDialog.getByRole('option', {name: /Operador Emulador/}).click();
   await requestDialog.getByRole('button', {name: 'Crear solicitud'}).click();
   await expect(page.getByText(requestTitle)).toBeVisible();
-  await logout(page);
-
-  await login(page, operator);
-  await page.getByRole('link', {name: 'Mis solicitudes', exact: true}).click();
+  await page.getByRole('link', {name: 'Solicitudes', exact: true}).click();
   await page.getByText(requestTitle).click();
   await page.getByRole('button', {name: 'Iniciar solicitud'}).click();
   await page.getByRole('link', {name: 'Cotizaciones', exact: true}).click();

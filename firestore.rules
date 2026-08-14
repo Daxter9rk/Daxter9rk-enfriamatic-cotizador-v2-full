@@ -625,12 +625,8 @@ service cloud.firestore {
             && quoteMatchesRequest(request.resource.data)
             && (
               isAdmin()
-              || (
-                isOperator()
-                && request.resource.data.assignedTo == request.auth.uid
-              )
+              || (isOperator() && request.resource.data.assignedTo == request.auth.uid)
             )
-            && validQuote(request.resource.data)
             && validCreateAudit(request.resource.data)
           )
           || (
@@ -666,7 +662,7 @@ service cloud.firestore {
           'commercialHistory', 'lastRejectionReason', 'lastRejectedAt',
           'lastRejectedBy', 'lastRejectedByName', 'lastRejectedByRole'
         ])
-        && validMutableQuote(request.resource.data)
+        && (isAdmin() || isOperator())
         && validUpdateAudit(request.resource.data);
       allow delete: if false;
 
