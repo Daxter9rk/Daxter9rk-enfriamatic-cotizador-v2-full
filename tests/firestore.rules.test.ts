@@ -295,10 +295,10 @@ describe('Firestore rules — ownership, scope, and known IDs', () => {
     await assertSucceeds(getDoc(doc(db, 'auditLogs/operator-log')));
   });
 
-  it('exposes only known settings documents to active operators', async () => {
+  it('keeps settings administrative and denies operators', async () => {
     const operatorDb = environment.authenticatedContext('operator').firestore();
-    await assertSucceeds(getDoc(doc(operatorDb, 'settings/companyProfile')));
-    await assertSucceeds(getDoc(doc(operatorDb, 'settings/quoteDefaults')));
+    await assertFails(getDoc(doc(operatorDb, 'settings/companyProfile')));
+    await assertFails(getDoc(doc(operatorDb, 'settings/quoteDefaults')));
     await assertFails(getDoc(doc(operatorDb, 'settings/internalSecret')));
     await assertFails(getDocs(query(collection(operatorDb, 'settings'), limit(20))));
   });
