@@ -6,6 +6,7 @@ import {FilterBar} from '../../components/FilterBar';
 import {PageHeader} from '../../components/PageHeader';
 import {StatePanel} from '../../components/StatePanel';
 import {useCollection} from '../../hooks/useCollection';
+import {usePaginatedCollection} from '../../hooks/usePaginatedCollection';
 import type {
   CatalogItem,
   Client,
@@ -35,10 +36,40 @@ export function QuotesPage() {
   const {profile} = useAuth();
   const search = useSearch();
   const [, navigate] = useLocation();
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [documentStatusFilter, setDocumentStatusFilter] = useState('all');
+  const [assignmentFilter, setAssignmentFilter] = useState('all');
+  const [quoteSearch, setQuoteSearch] = useState('');
+  const [clientFilter, setClientFilter] = useState('all');
+  const [creatorFilter, setCreatorFilter] = useState('all');
+  const [fromDate, setFromDate] = useState('');
+  const [sort, setSort] = useState('newest');
   const operatorFilter = profile?.role === 'operator' ? [constraints.assignedTo(profile.uid)] : [];
   const masterDataFilter =
     profile?.role === 'operator' ? [constraints.authorizedFor(profile.uid)] : [];
-  const quotes = useCollection<Quote>('quotes', operatorFilter);
+  const quoteConstraints = [
+    ...operatorFilter,
+    ...(statusFilter !== 'all' ? [constraints.status(statusFilter)] : []),
+    ...(documentStatusFilter !== 'all' ? [constraints.documentStatus(documentStatusFilter)] : []),
+    ...(profile?.role === 'admin' && assignmentFilter !== 'all'
+      ? [
+          assignmentFilter === 'unassigned'
+            ? constraints.unassigned()
+            : constraints.assignedTo(assignmentFilter),
+        ]
+      : []),
+  ];
+  const quotes = usePaginatedCollection<Quote>(
+    'quotes',
+    quoteConstraints,
+    [
+      {field: 'updatedAt', direction: 'desc'},
+      {field: '__name__', direction: 'desc'},
+    ],
+    25,
+    true,
+    `${profile?.uid ?? 'admin'}|${statusFilter}|${documentStatusFilter}|${assignmentFilter}|${quoteSearch}|${clientFilter}|${creatorFilter}|${fromDate}|${sort}`,
+  );
   const requests = useCollection<ServiceRequest>('requests', operatorFilter);
   const clients = useCollection<Client>('clients', masterDataFilter);
   const sites = useCollection<Site>('sites', masterDataFilter);
@@ -53,12 +84,6 @@ export function QuotesPage() {
   const [creating, setCreating] = useState(false);
   const [creationClientId, setCreationClientId] = useState('');
   const [creationRequestId, setCreationRequestId] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [quoteSearch, setQuoteSearch] = useState('');
-  const [clientFilter, setClientFilter] = useState('all');
-  const [creatorFilter, setCreatorFilter] = useState('all');
-  const [fromDate, setFromDate] = useState('');
-  const [sort, setSort] = useState('newest');
   const [view, setView] = useState<'cards' | 'list' | 'table'>(
     () =>
       (localStorage.getItem('enfriamatic:quotes-view') as 'cards' | 'list' | 'table') || 'cards',
@@ -104,7 +129,10 @@ export function QuotesPage() {
           (clientFilter === 'all' || quote.clientId === clientFilter) &&
           (creatorFilter === 'all' || quote.createdBy === creatorFilter) &&
           (!start || (quote.createdAt?.toMillis?.() ?? 0) >= start) &&
-          (!term || `${quote.folio} ${clientName}`.toLocaleLowerCase('es-MX').includes(term))
+          (!term ||
+            `${quote.folio} ${clientName} ${quote.serviceReference ?? ''}`
+              .toLocaleLowerCase('es-MX')
+              .includes(term))
         );
       })
       .sort((left, right) => {
@@ -214,6 +242,8 @@ export function QuotesPage() {
         onClear={() => {
           setQuoteSearch('');
           setStatusFilter('all');
+          setDocumentStatusFilter('all');
+          setAssignmentFilter('all');
           setClientFilter('all');
           setCreatorFilter('all');
           setFromDate('');
@@ -230,6 +260,19 @@ export function QuotesPage() {
             <option value="accepted">Aceptada</option>
             <option value="rejected">Rechazada</option>
             <option value="cancelled">Cancelada</option>
+          </select>
+        </label>
+        <label>
+          Documento
+          <select
+            value={documentStatusFilter}
+            onChange={(event) => setDocumentStatusFilter(event.target.value)}
+          >
+            <option value="all">Todos</option>
+            <option value="not_generated">Sin PDF</option>
+            <option value="generating">Generando PDF</option>
+            <option value="ready">PDF listo</option>
+            <option value="failed">PDF con fallo</option>
           </select>
         </label>
         <label>
@@ -251,6 +294,23 @@ export function QuotesPage() {
               onChange={(event) => setCreatorFilter(event.target.value)}
             >
               <option value="all">Todos</option>
+              {users.data.map((user) => (
+                <option key={user.uid} value={user.uid}>
+                  {user.displayName}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {profile?.role === 'admin' && (
+          <label>
+            Asignación
+            <select
+              value={assignmentFilter}
+              onChange={(event) => setAssignmentFilter(event.target.value)}
+            >
+              <option value="all">Todos</option>
+              <option value="unassigned">Sin asignar</option>
               {users.data.map((user) => (
                 <option key={user.uid} value={user.uid}>
                   {user.displayName}
@@ -293,7 +353,13 @@ export function QuotesPage() {
           </button>
         </StatePanel>
       ) : visible.length === 0 ? (
-        <StatePanel title="No hay cotizaciones para este filtro" />
+        <StatePanel
+          title={
+            quotes.data.length === 0
+              ? 'No existen cotizaciones todavía'
+              : 'No se encontraron coincidencias con los filtros actuales'
+          }
+        />
       ) : (
         <section className={`record-grid record-grid--${view}`}>
           {view === 'table' && (
@@ -328,6 +394,25 @@ export function QuotesPage() {
             </button>
           ))}
         </section>
+      )}
+      {!quotes.loading && !quotes.error && (quotes.page > 1 || quotes.hasMore) && (
+        <nav className="button-row" aria-label="Paginación de cotizaciones">
+          <button
+            className="button button--ghost"
+            disabled={quotes.page === 1}
+            onClick={() => void quotes.previousPage()}
+          >
+            Anteriores
+          </button>
+          <span>Página {quotes.page}</span>
+          <button
+            className="button button--ghost"
+            disabled={!quotes.hasMore}
+            onClick={() => void quotes.nextPage()}
+          >
+            Siguientes
+          </button>
+        </nav>
       )}
       {creating && (
         <Modal title="Nueva cotización" onClose={() => setCreating(false)}>

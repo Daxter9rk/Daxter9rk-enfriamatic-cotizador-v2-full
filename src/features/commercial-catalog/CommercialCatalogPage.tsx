@@ -5,7 +5,7 @@ import {FilterBar} from '../../components/FilterBar';
 import {Modal} from '../../components/Modal';
 import {PageHeader} from '../../components/PageHeader';
 import {StatePanel} from '../../components/StatePanel';
-import {useCollection} from '../../hooks/useCollection';
+import {usePaginatedCollection} from '../../hooks/usePaginatedCollection';
 import type {CatalogItem} from '../../models/domain';
 import {catalogItemInputSchema} from '../../models/schemas';
 import {
@@ -22,15 +22,26 @@ import {reportFileDiagnostic} from '../../utils/privateFiles';
 
 export function CommercialCatalogPage() {
   const {profile} = useAuth();
-  const catalog = useCollection<CatalogItem>(
-    'catalogItems',
-    profile?.role === 'operator' ? [constraints.activeOnly()] : [],
-    100,
-  );
   const [search, setSearch] = useState('');
   const [type, setType] = useState('all');
   const [category, setCategory] = useState('all');
+  const [unit, setUnit] = useState('all');
   const [status, setStatus] = useState('all');
+  const catalog = usePaginatedCollection<CatalogItem>(
+    'catalogItems',
+    profile?.role === 'operator'
+      ? [constraints.activeOnly()]
+      : status === 'all'
+        ? []
+        : [constraints.status(status)],
+    [
+      {field: 'name', direction: 'asc'},
+      {field: '__name__', direction: 'asc'},
+    ],
+    25,
+    true,
+    `${profile?.role ?? 'operator'}|${status}|${search}|${type}|${category}|${unit}|${sort}`,
+  );
   const [sort, setSort] = useState('az');
   const [editing, setEditing] = useState<CatalogItem | 'new' | null>(null);
   const [busy, setBusy] = useState(false);
@@ -47,6 +58,7 @@ export function CommercialCatalogPage() {
           (item) =>
             (type === 'all' || item.type === type) &&
             (category === 'all' || item.category === category) &&
+            (unit === 'all' || item.unit === unit) &&
             (status === 'all' || item.status === status) &&
             matchesCatalogSearch(item, search),
         )
@@ -56,7 +68,7 @@ export function CommercialCatalogPage() {
           if (sort === 'price-asc') return left.basePrice - right.basePrice;
           return left.name.localeCompare(right.name, 'es-MX');
         }),
-    [catalog.data, category, search, sort, status, type],
+    [catalog.data, category, search, sort, status, type, unit],
   );
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -155,6 +167,7 @@ export function CommercialCatalogPage() {
           setSearch('');
           setType('all');
           setCategory('all');
+          setUnit('all');
           setStatus('all');
           setSort('az');
         }}
@@ -172,6 +185,12 @@ export function CommercialCatalogPage() {
           <option value="all">Todas las categorías</option>
           {categories.map((item) => (
             <option key={item}>{item}</option>
+          ))}
+        </select>
+        <select aria-label="Unidad" value={unit} onChange={(event) => setUnit(event.target.value)}>
+          <option value="all">Todas las unidades</option>
+          {[...new Set(catalog.data.map((item) => item.unit))].sort().map((value) => (
+            <option key={value}>{value}</option>
           ))}
         </select>
         {profile?.role === 'admin' && (
@@ -193,8 +212,18 @@ export function CommercialCatalogPage() {
           </button>
         </StatePanel>
       ) : visible.length === 0 ? (
-        <StatePanel title="No hay artículos para estos filtros">
-          <p>Prueba otra búsqueda o crea el primer artículo comercial.</p>
+        <StatePanel
+          title={
+            catalog.data.length === 0
+              ? 'No existen artículos comerciales todavía'
+              : 'No se encontraron coincidencias con los filtros actuales'
+          }
+        >
+          <p>
+            {catalog.data.length === 0
+              ? 'Crea el primer artículo comercial.'
+              : 'Prueba otra búsqueda o limpia los filtros.'}
+          </p>
         </StatePanel>
       ) : (
         <section className="catalog-grid" aria-label={`${visible.length} artículos`}>
@@ -255,6 +284,25 @@ export function CommercialCatalogPage() {
             </article>
           ))}
         </section>
+      )}
+      {!catalog.loading && !catalog.error && (catalog.page > 1 || catalog.hasMore) && (
+        <nav className="button-row" aria-label="Paginación del catálogo comercial">
+          <button
+            className="button button--ghost"
+            disabled={catalog.page === 1}
+            onClick={() => void catalog.previousPage()}
+          >
+            Anteriores
+          </button>
+          <span>Página {catalog.page}</span>
+          <button
+            className="button button--ghost"
+            disabled={!catalog.hasMore}
+            onClick={() => void catalog.nextPage()}
+          >
+            Siguientes
+          </button>
+        </nav>
       )}
       {message && !editing && <p className="form-message form-message--error">{message}</p>}
       {editing && profile?.role === 'admin' && (

@@ -6,6 +6,7 @@ import {FilterBar} from '../../components/FilterBar';
 import {PageHeader} from '../../components/PageHeader';
 import {StatePanel} from '../../components/StatePanel';
 import {useCollection} from '../../hooks/useCollection';
+import {usePaginatedCollection} from '../../hooks/usePaginatedCollection';
 import type {Client, Equipment, Site} from '../../models/domain';
 import {
   clientInputSchema,
@@ -42,17 +43,27 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
   const {profile} = useAuth();
   const searchQuery = useSearch();
   const [, navigate] = useLocation();
-  const operatorConstraints =
-    profile?.role === 'operator' ? [constraints.authorizedFor(profile.uid)] : [];
-  const records = useCollection<MasterRecord>(kind, operatorConstraints);
-  const clients = useCollection<Client>('clients', operatorConstraints);
-  const sites = useCollection<Site>('sites', operatorConstraints);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [siteFilter, setSiteFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [brandFilter, setBrandFilter] = useState('all');
   const [operationalFilter, setOperationalFilter] = useState('all');
   const [sort, setSort] = useState('az');
+  const operatorConstraints =
+    profile?.role === 'operator' ? [constraints.authorizedFor(profile.uid)] : [];
+  const records = usePaginatedCollection<MasterRecord>(
+    kind,
+    kind === 'clients' && statusFilter !== 'all'
+      ? [...operatorConstraints, constraints.status(statusFilter)]
+      : operatorConstraints,
+    [{field: 'name', direction: 'asc'}],
+    25,
+    true,
+    `${kind}|${profile?.uid ?? 'admin'}|${statusFilter}|${search}`,
+  );
+  const clients = useCollection<Client>('clients', operatorConstraints);
+  const sites = useCollection<Site>('sites', operatorConstraints);
   const [editing, setEditing] = useState<MasterRecord | 'new' | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -82,18 +93,22 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
   };
 
   const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
+    const term = search.trim().toLocaleLowerCase('es-MX');
     return records.data
       .filter((record) => {
         const unit = kind === 'equipment' ? (record as Equipment) : null;
         const searchable = [
           record.name,
+          'legalName' in record ? record.legalName : '',
+          'rfc' in record ? record.rfc : '',
+          'email' in record ? record.email : '',
+          'phone' in record ? record.phone : '',
           'category' in record ? record.category : '',
           'brand' in record ? record.brand : '',
           'serialNumber' in record ? record.serialNumber : '',
         ];
         return (
-          (!term || searchable.some((value) => value?.toLowerCase().includes(term))) &&
+          (!term || searchable.some((value) => value?.toLocaleLowerCase('es-MX').includes(term))) &&
           (!unit || siteFilter === 'all' || unit.siteId === siteFilter) &&
           (!unit || categoryFilter === 'all' || unit.category === categoryFilter) &&
           (!unit || brandFilter === 'all' || unit.brand === brandFilter) &&
@@ -102,6 +117,7 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
       })
       .sort((left, right) => {
         if (sort === 'za') return right.name.localeCompare(left.name, 'es-MX');
+        if (kind === 'clients') return left.name.localeCompare(right.name, 'es-MX');
         if (sort === 'newest')
           return (right.updatedAt?.toMillis?.() ?? 0) - (left.updatedAt?.toMillis?.() ?? 0);
         if (sort === 'oldest')
@@ -175,6 +191,7 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
         onSort={setSort}
         onClear={() => {
           setSearch('');
+          setStatusFilter('all');
           setSiteFilter('all');
           setCategoryFilter('all');
           setBrandFilter('all');
@@ -182,6 +199,19 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
           setSort('az');
         }}
       >
+        {kind === 'clients' && (
+          <label>
+            Estado
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+            >
+              <option value="all">Todos</option>
+              <option value="active">Activos</option>
+              <option value="inactive">Inactivos</option>
+            </select>
+          </label>
+        )}
         {kind === 'equipment' && (
           <>
             <label>
@@ -261,7 +291,7 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
             </button>
           ))}
         </div>
-        <span>{filtered.length} registros</span>
+        <span>{filtered.length} registros en esta página</span>
       </FilterBar>
       {records.error ? (
         <StatePanel kind="error" title="No fue posible cargar los datos">
@@ -271,8 +301,18 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
           </button>
         </StatePanel>
       ) : filtered.length === 0 ? (
-        <StatePanel title={`No hay ${labels.title.toLowerCase()}`}>
-          <p>Usa los filtros o crea el primer registro.</p>
+        <StatePanel
+          title={
+            records.data.length === 0
+              ? `No existen ${labels.title.toLowerCase()} todavía`
+              : 'No se encontraron coincidencias con los filtros actuales'
+          }
+        >
+          <p>
+            {records.data.length === 0
+              ? 'Crea el primer registro para comenzar.'
+              : 'Prueba otra búsqueda o limpia los filtros.'}
+          </p>
         </StatePanel>
       ) : (
         <section className={`record-grid record-grid--${view}`} aria-label={labels.title}>
@@ -309,6 +349,25 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
             </article>
           ))}
         </section>
+      )}
+      {!records.loading && !records.error && (records.page > 1 || records.hasMore) && (
+        <nav className="button-row" aria-label="Paginación de clientes">
+          <button
+            className="button button--ghost"
+            disabled={records.page === 1}
+            onClick={() => void records.previousPage()}
+          >
+            Anteriores
+          </button>
+          <span>Página {records.page}</span>
+          <button
+            className="button button--ghost"
+            disabled={!records.hasMore}
+            onClick={() => void records.nextPage()}
+          >
+            Siguientes
+          </button>
+        </nav>
       )}
       {editing && (
         <Modal
