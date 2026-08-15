@@ -14,12 +14,8 @@ interface NavigationItem {
 const operationalLinks: NavigationItem[] = [
   {href: '/', label: 'Inicio', icon: 'home'},
   {href: '/clients', label: 'Clientes', icon: 'client'},
-  {href: '/sites', label: 'Instalaciones', icon: 'site'},
-  {href: '/equipment', label: 'Equipos', icon: 'equipment'},
-  {href: '/requests', label: 'Solicitudes', icon: 'request'},
   {href: '/quotes', label: 'Cotizaciones', icon: 'quote'},
   {href: '/commercial-catalog', label: 'Catálogo comercial', icon: 'catalog'},
-  {href: '/activity', label: 'Actividad', icon: 'activity'},
 ];
 
 const helpLinks: NavigationItem[] = [
@@ -36,11 +32,7 @@ export function AppShell({children}: {children: ReactNode}) {
   const {profile, logout} = useAuth();
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
-  const operationItems = operationalLinks.map((item) =>
-    item.href === '/requests' && profile?.role === 'operator'
-      ? {...item, label: 'Mis solicitudes'}
-      : item,
-  );
+  const operationItems = operationalLinks;
 
   return (
     <div className="app-shell">

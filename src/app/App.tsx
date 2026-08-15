@@ -23,19 +23,6 @@ const ClientDetailPage = lazy(() =>
     default: module.ClientDetailPage,
   })),
 );
-const SiteDetailPage = lazy(() =>
-  import('../features/master-data/EntityDetailPages').then((module) => ({
-    default: module.SiteDetailPage,
-  })),
-);
-const EquipmentDetailPage = lazy(() =>
-  import('../features/master-data/EntityDetailPages').then((module) => ({
-    default: module.EquipmentDetailPage,
-  })),
-);
-const RequestsPage = lazy(() =>
-  import('../features/requests/RequestsPage').then((module) => ({default: module.RequestsPage})),
-);
 const QuotesPage = lazy(() =>
   import('../features/quotes/QuotesPage').then((module) => ({default: module.QuotesPage})),
 );
@@ -43,9 +30,6 @@ const CommercialCatalogPage = lazy(() =>
   import('../features/commercial-catalog/CommercialCatalogPage').then((module) => ({
     default: module.CommercialCatalogPage,
   })),
-);
-const ActivityPage = lazy(() =>
-  import('../features/activity/ActivityPage').then((module) => ({default: module.ActivityPage})),
 );
 const SettingsPage = lazy(() =>
   import('../features/settings/SettingsPage').then((module) => ({default: module.SettingsPage})),
@@ -92,22 +76,28 @@ export function App() {
             <MasterDataPage kind="clients" />
           </Route>
           <Route path="/sites/:siteId">
-            {(params) => <SiteDetailPage siteId={params.siteId} />}
+            <Redirect to="/quotes" replace />
           </Route>
           <Route path="/sites">
-            <MasterDataPage kind="sites" />
+            <Redirect to="/quotes" replace />
           </Route>
           <Route path="/equipment/:equipmentId">
-            {(params) => <EquipmentDetailPage equipmentId={params.equipmentId} />}
+            <Redirect to="/quotes" replace />
           </Route>
           <Route path="/equipment">
-            <MasterDataPage kind="equipment" />
+            <Redirect to="/quotes" replace />
           </Route>
-          <Route path="/requests/:requestId" component={RequestsPage} />
-          <Route path="/requests" component={RequestsPage} />
+          <Route path="/requests/:requestId">
+            <Redirect to="/quotes" replace />
+          </Route>
+          <Route path="/requests">
+            <Redirect to="/quotes" replace />
+          </Route>
           <Route path="/quotes" component={QuotesPage} />
           <Route path="/commercial-catalog" component={CommercialCatalogPage} />
-          <Route path="/activity" component={ActivityPage} />
+          <Route path="/activity">
+            <Redirect to="/quotes" replace />
+          </Route>
           <Route path="/manual" component={ManualPage} />
           <Route path="/support" component={SupportPage} />
           <Route path="/users">
