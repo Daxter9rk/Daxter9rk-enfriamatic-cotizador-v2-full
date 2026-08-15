@@ -10,7 +10,7 @@ async function login(page: Page) {
   await page.getByTestId('login-email').fill(credentials.email);
   await page.getByTestId('login-password').fill(credentials.password);
   await page.getByTestId('login-submit').click();
-  await expect(page.getByText(/centro de operación/i)).toBeVisible();
+  await expect(page.getByText(/centro comercial/i)).toBeVisible();
 }
 
 async function expectNoHorizontalOverflow(page: Page) {
@@ -68,7 +68,7 @@ test('dashboard remains operable at required browser zoom levels', async ({page}
       document.documentElement.style.zoom = String(factor);
     }, zoom);
     await expect(page.getByRole('heading', {name: /buen día/i})).toBeVisible();
-    await expect(page.getByRole('link', {name: 'Nueva solicitud'})).toBeVisible();
+    await expect(page.getByRole('link', {name: 'Nueva cotización'})).toBeVisible();
     await expectNoHorizontalOverflow(page);
   }
 });
