@@ -3,53 +3,16 @@ import {useAuth} from '../../app/providers/AuthProvider';
 import {PageHeader} from '../../components/PageHeader';
 import {ReauthenticationModal} from '../../components/ReauthenticationModal';
 import {StatePanel} from '../../components/StatePanel';
-import {getDocument, setKnownDocumentsAtomically} from '../../services/firebase/data';
-
-interface CompanyProfile {
-  companyName: string;
-  rfc: string;
-  address: string;
-  phone: string;
-  email: string;
-  legalText: string;
-}
-
-interface QuoteDefaults {
-  taxRate: number;
-  validityDays: number;
-  currency: 'MXN';
-  folioPrefix: string;
-  paymentMethod: string;
-  advance: string;
-  estimatedTerm: string;
-  warranty: string;
-  exclusions: string;
-  observations: string;
-  devWatermark: string;
-}
-
-const emptyCompany: CompanyProfile = {
-  companyName: 'Enfriamatic',
-  rfc: '',
-  address: '',
-  phone: '',
-  email: '',
-  legalText: '',
-};
-
-const emptyDefaults: QuoteDefaults = {
-  taxRate: 0.16,
-  validityDays: 15,
-  currency: 'MXN',
-  folioPrefix: 'COT',
-  paymentMethod: '',
-  advance: '',
-  estimatedTerm: '',
-  warranty: '',
-  exclusions: '',
-  observations: '',
-  devWatermark: 'ENFRIAMATIC — DOCUMENTO DE PRUEBA DEV',
-};
+import {getDocument, updateDocument} from '../../services/firebase/data';
+import {
+  emptyCompany,
+  emptyDefaults,
+  normalizeCompany,
+  normalizeDefaults,
+  validateSettings,
+  type CompanyProfile,
+  type QuoteDefaults,
+} from './settingsContract';
 
 export function SettingsPage() {
   const {profile} = useAuth();
@@ -61,19 +24,22 @@ export function SettingsPage() {
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     void Promise.all([
       getDocument<Partial<CompanyProfile>>('settings', 'companyProfile'),
       getDocument<Partial<QuoteDefaults>>('settings', 'quoteDefaults'),
-    ]).then(([companyValue, defaultValue]) => {
-      const nextCompany = {...emptyCompany, ...companyValue};
-      const nextDefaults = {...emptyDefaults, ...defaultValue, currency: 'MXN' as const};
-      setCompany(nextCompany);
-      setDefaults(nextDefaults);
-      setSnapshot({company: nextCompany, defaults: nextDefaults});
-      setLoading(false);
-    });
+    ])
+      .then(([companyValue, defaultValue]) => {
+        const nextCompany = normalizeCompany(companyValue);
+        const nextDefaults = normalizeDefaults(defaultValue);
+        setCompany(nextCompany);
+        setDefaults(nextDefaults);
+        setSnapshot({company: nextCompany, defaults: nextDefaults});
+      })
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
   }, []);
 
   const cancel = () => {
@@ -86,14 +52,15 @@ export function SettingsPage() {
   const requestSave = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!profile) return;
-    if (!company.companyName.trim() || !defaults.folioPrefix.trim()) {
-      setMessage('Completa el nombre de empresa y el prefijo de folio.');
+    const normalizedCompany = normalizeCompany(company);
+    const normalizedDefaults = normalizeDefaults(defaults);
+    const validationError = validateSettings(normalizedCompany, normalizedDefaults);
+    if (validationError) {
+      setMessage(validationError);
       return;
     }
-    if (defaults.taxRate < 0 || defaults.taxRate > 1) {
-      setMessage('El IVA debe estar entre 0 % y 100 %.');
-      return;
-    }
+    setCompany(normalizedCompany);
+    setDefaults(normalizedDefaults);
     setConfirming(true);
   };
 
@@ -102,14 +69,11 @@ export function SettingsPage() {
     setBusy(true);
     setMessage(null);
     try {
-      await setKnownDocumentsAtomically(
-        [
-          {collectionName: 'settings', id: 'companyProfile', data: company},
-          {collectionName: 'settings', id: 'quoteDefaults', data: defaults},
-        ],
-        profile.uid,
-      );
-      setSnapshot({company, defaults});
+      await Promise.all([
+        updateDocument('settings', 'companyProfile', company, profile.uid),
+        updateDocument('settings', 'quoteDefaults', defaults, profile.uid),
+      ]);
+      setSnapshot({company: normalizeCompany(company), defaults: normalizeDefaults(defaults)});
       setEditing(false);
       setConfirming(false);
       setMessage('Configuración guardada y registrada en auditoría.');
@@ -122,8 +86,12 @@ export function SettingsPage() {
   };
 
   if (loading) return <StatePanel kind="loading" title="Cargando configuración…" />;
+  if (loadError) {
+    return <StatePanel kind="error" title="No fue posible consultar la configuración" />;
+  }
 
   const readonly = !editing || busy;
+  const hasChanges = JSON.stringify({company, defaults}) !== JSON.stringify(snapshot);
   return (
     <>
       <PageHeader
@@ -331,7 +299,9 @@ export function SettingsPage() {
             <button type="button" className="button button--ghost" onClick={cancel}>
               Cancelar
             </button>
-            <button className="button button--primary">Guardar cambios</button>
+            <button className="button button--primary" disabled={busy || !hasChanges}>
+              {busy ? 'Guardando…' : 'Guardar cambios'}
+            </button>
           </div>
         )}
       </form>
