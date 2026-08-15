@@ -7,16 +7,7 @@ import {PageHeader} from '../../components/PageHeader';
 import {StatePanel} from '../../components/StatePanel';
 import {useCollection} from '../../hooks/useCollection';
 import {usePaginatedCollection} from '../../hooks/usePaginatedCollection';
-import type {
-  CatalogItem,
-  Client,
-  Equipment,
-  Quote,
-  ServiceRequest,
-  Site,
-  UserProfile,
-  UserRole,
-} from '../../models/domain';
+import type {CatalogItem, Client, Equipment, Quote, Site, UserProfile} from '../../models/domain';
 import {
   createQuoteRecord,
   createQuoteDraft,
@@ -70,7 +61,6 @@ export function QuotesPage() {
     true,
     `${profile?.uid ?? 'admin'}|${statusFilter}|${documentStatusFilter}|${assignmentFilter}|${quoteSearch}|${clientFilter}|${creatorFilter}|${fromDate}|${sort}`,
   );
-  const requests = useCollection<ServiceRequest>('requests', operatorFilter);
   const clients = useCollection<Client>('clients', masterDataFilter);
   const sites = useCollection<Site>('sites', masterDataFilter);
   const equipment = useCollection<Equipment>('equipment', masterDataFilter);
@@ -83,7 +73,6 @@ export function QuotesPage() {
   const [selected, setSelected] = useState<Quote | null>(null);
   const [creating, setCreating] = useState(false);
   const [creationClientId, setCreationClientId] = useState('');
-  const [creationRequestId, setCreationRequestId] = useState('');
   const [view, setView] = useState<'cards' | 'list' | 'table'>(
     () =>
       (localStorage.getItem('enfriamatic:quotes-view') as 'cards' | 'list' | 'table') || 'cards',
@@ -114,10 +103,6 @@ export function QuotesPage() {
     setSelected(null);
   };
 
-  const validRequests = requests.data.filter((request) =>
-    ['assigned', 'in_progress'].includes(request.status),
-  );
-  const creationRequest = validRequests.find((request) => request.id === creationRequestId);
   const visible = useMemo(() => {
     const term = quoteSearch.trim().toLocaleLowerCase('es-MX');
     const start = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : 0;
@@ -161,33 +146,27 @@ export function QuotesPage() {
     setMessage(null);
     try {
       const form = new FormData(event.currentTarget);
-      const requestId = String(form.get('requestId') ?? '').trim() || null;
-      const request = requestId ? validRequests.find((item) => item.id === requestId) : null;
-      const clientId = request?.clientId ?? String(form.get('clientId') ?? '');
-      const assignedTo =
-        request?.assignedTo ?? (String(form.get('assignedTo') ?? '').trim() || null);
+      const clientId = String(form.get('clientId') ?? '');
+      const assignedTo = String(form.get('assignedTo') ?? '').trim() || null;
       const draft = createQuoteDraft({
         actorId: profile.uid,
         actorRole: profile.role,
         clientId,
-        requestId,
+        requestId: null,
         assignedTo,
-        siteId: request?.siteId ?? (String(form.get('siteId') ?? '').trim() || null),
-        equipmentId: request?.equipmentId ?? (String(form.get('equipmentId') ?? '').trim() || null),
+        siteId: null,
+        equipmentId: null,
         serviceReference: String(form.get('serviceReference') ?? ''),
         technicalContext: String(form.get('technicalContext') ?? ''),
       });
-      if (request && request.clientId !== clientId) {
-        throw new Error('La solicitud no coincide con el cliente seleccionado.');
-      }
       const id = await createQuoteRecord({
         actorId: profile.uid,
         actorRole: profile.role,
         clientId: draft.clientId,
-        requestId: draft.requestId,
+        requestId: null,
         assignedTo: draft.assignedTo,
-        siteId: draft.siteId,
-        equipmentId: draft.equipmentId,
+        siteId: null,
+        equipmentId: null,
         serviceReference: draft.serviceReference ?? null,
         technicalContext: draft.technicalContext ?? null,
       });
@@ -217,7 +196,6 @@ export function QuotesPage() {
             className="button button--primary"
             onClick={() => {
               setCreationClientId('');
-              setCreationRequestId('');
               setCreating(true);
             }}
             data-testid="new-quote"
@@ -345,7 +323,7 @@ export function QuotesPage() {
         </div>
       </FilterBar>
       {clients.data.length === 0 ? (
-        <MissingRequirements role={profile?.role} />
+        <MissingRequirements />
       ) : quotes.error ? (
         <StatePanel kind="error" title="No fue posible cargar cotizaciones">
           <button className="button button--secondary" onClick={() => void quotes.reload()}>
@@ -435,43 +413,13 @@ export function QuotesPage() {
                 ))}
               </select>
             </label>
-            <label className="field-wide">
-              Solicitud (opcional)
-              <select
-                name="requestId"
-                data-testid="quote-request"
-                value={creationRequestId}
-                onChange={(event) => {
-                  const requestId = event.target.value;
-                  const request = validRequests.find((item) => item.id === requestId);
-                  setCreationRequestId(requestId);
-                  if (request) setCreationClientId(request.clientId);
-                }}
-              >
-                <option value="">Sin solicitud vinculada</option>
-                {validRequests
-                  .filter((request) => !creationClientId || request.clientId === creationClientId)
-                  .map((request) => (
-                    <option key={request.id} value={request.id}>
-                      {request.title}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            {creationRequest ? (
-              <section className="field-wide quote-link-summary" aria-label="Cotización vinculada">
-                <strong>Cotización vinculada a solicitud</strong>
-                <span>Instalación y equipo se derivan de la solicitud.</span>
-              </section>
-            ) : (
-              <section
-                className="field-wide quote-link-summary"
-                aria-label="Cotización independiente"
-              >
-                <strong>Cotización independiente</strong>
-                <span>Se guardará sin Instalación ni Equipo vinculados.</span>
-              </section>
-            )}
+            <section
+              className="field-wide quote-link-summary"
+              aria-label="Cotización independiente"
+            >
+              <strong>Cotización independiente</strong>
+              <span>Se guardará con contexto técnico y sin vínculos operativos históricos.</span>
+            </section>
             <label>
               Referencia de servicio (opcional)
               <input name="serviceReference" maxLength={500} />
@@ -567,40 +515,31 @@ function QuoteCreationGuide() {
       </li>
       <li>
         <span>2</span>
-        <strong>Instalación</strong>
-        <small>Opcional para cotizaciones independientes</small>
+        <strong>Referencia de servicio</strong>
+        <small>Texto opcional para identificar el trabajo</small>
       </li>
       <li>
         <span>3</span>
-        <strong>Solicitud</strong>
-        <small>Referencia de servicio opcional</small>
+        <strong>Contexto técnico</strong>
+        <small>Texto opcional para orientar la propuesta</small>
       </li>
       <li>
         <span>4</span>
-        <strong>Equipo</strong>
-        <small>Contexto tÃ©cnico, instalaciÃ³n y equipo opcionales</small>
+        <strong>Partidas</strong>
+        <small>Se agregan después de guardar el borrador</small>
       </li>
     </ol>
   );
 }
 
-export function MissingRequirements({role}: {role: UserRole | undefined}) {
+export function MissingRequirements() {
   return (
     <section className="requirements-panel field-wide" role="status">
       <h3>Aún no puedes crear una cotización</h3>
-      <p>
-        Necesitas una solicitud asignada o en progreso vinculada con un cliente y una instalación.
-        No se permiten cotizaciones libres porque romperían la trazabilidad.
-      </p>
+      <p>Necesitas al menos un Cliente activo para iniciar una cotización independiente.</p>
       <div className="button-row">
         <Link className="button button--ghost" href="/clients">
           Ver clientes
-        </Link>
-        <Link className="button button--ghost" href="/sites">
-          Ver instalaciones
-        </Link>
-        <Link className="button button--secondary" href="/requests">
-          {role === 'admin' ? 'Gestionar solicitudes' : 'Ver mis solicitudes'}
         </Link>
       </div>
     </section>

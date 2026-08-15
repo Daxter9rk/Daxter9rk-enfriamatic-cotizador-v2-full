@@ -41,7 +41,6 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
   const productName = `Producto E2E ${suffix}`;
   const serviceName = `Servicio E2E ${suffix}`;
   const clientName = 'Procesos Fríos del Bajío';
-  const requestTitle = 'Diagnóstico del chiller';
 
   await login(page);
   await page
@@ -69,7 +68,6 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
     .click();
   await page.getByTestId('new-quote').click();
   await page.getByTestId('quote-client').selectOption({label: clientName});
-  await page.getByTestId('quote-request').selectOption({label: requestTitle});
   await page.getByRole('button', {name: 'Crear cotización'}).click();
 
   await page.getByRole('button', {name: 'Agregar Compresor emulador'}).click();

@@ -29,12 +29,12 @@ vi.mock('../../hooks/usePaginatedCollection', () => ({
 }));
 
 describe('QuotesPage independent creation', () => {
-  it('allows a draft without a request while keeping client required', async () => {
+  it('creates only independent drafts while keeping client required', async () => {
     const user = userEvent.setup();
     render(<QuotesPage />);
     await user.click(screen.getByRole('button', {name: 'Nueva cotización'}));
     expect(screen.getByTestId('quote-client')).toBeRequired();
-    expect(screen.getByTestId('quote-request')).not.toBeRequired();
+    expect(screen.queryByTestId('quote-request')).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox', {name: /Instalaci/})).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox', {name: /Equipo/})).not.toBeInTheDocument();
     expect(screen.getByLabelText(/Referencia de servicio/)).toBeVisible();
