@@ -15,6 +15,18 @@ vi.mock('../../hooks/useCollection', () => ({
     reload: vi.fn(),
   }),
 }));
+vi.mock('../../hooks/usePaginatedCollection', () => ({
+  usePaginatedCollection: (collection: string) => ({
+    data: collection === 'quotes' ? [] : [],
+    loading: false,
+    error: null,
+    reload: vi.fn(),
+    hasMore: false,
+    page: 1,
+    nextPage: vi.fn(),
+    previousPage: vi.fn(),
+  }),
+}));
 
 describe('QuotesPage independent creation', () => {
   it('allows a draft without a request while keeping client required', async () => {

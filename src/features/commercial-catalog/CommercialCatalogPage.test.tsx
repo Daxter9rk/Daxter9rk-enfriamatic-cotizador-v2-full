@@ -45,12 +45,16 @@ vi.mock('../../services/firebase/catalogImages', () => ({
   catalogImageErrorMessage: () => 'Imagen no disponible.',
   catalogImageTechnicalCode: () => 'functions/not-found',
 }));
-vi.mock('../../hooks/useCollection', () => ({
-  useCollection: () => ({
+vi.mock('../../hooks/usePaginatedCollection', () => ({
+  usePaginatedCollection: () => ({
     data: catalogItems,
     loading: false,
     error: null,
     reload: vi.fn(),
+    hasMore: false,
+    page: 1,
+    nextPage: vi.fn(),
+    previousPage: vi.fn(),
   }),
 }));
 
@@ -81,5 +85,14 @@ describe('CommercialCatalogPage', () => {
     expect(screen.queryByRole('button', {name: /agregar imagen/i})).not.toBeInTheDocument();
     expect(screen.queryByRole('button', {name: /cambiar imagen/i})).not.toBeInTheDocument();
     expect(screen.queryByRole('button', {name: /eliminar imagen/i})).not.toBeInTheDocument();
+  });
+
+  it('filtra por unidad y distingue una búsqueda sin coincidencias', async () => {
+    const user = (await import('@testing-library/user-event')).default.setup();
+    render(<CommercialCatalogPage />);
+    await user.selectOptions(screen.getByRole('combobox', {name: 'Unidad'}), 'pieza');
+    expect(screen.getByRole('heading', {name: 'Compresor de prueba'})).toBeVisible();
+    await user.type(screen.getByRole('searchbox'), 'no-existe');
+    expect(screen.getByText(/no se encontraron coincidencias/i)).toBeVisible();
   });
 });
