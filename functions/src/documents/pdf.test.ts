@@ -36,4 +36,49 @@ describe('quote PDF', () => {
     expect(result.pageCount).toBe(1);
     expect(physicalPages).toHaveLength(result.pageCount);
   });
+
+  it('grows long rows and repeats pages without duplicating the business data', async () => {
+    const items = Array.from({length: 24}, (_, index) => ({
+      quantity: index + 1,
+      unit: index % 2 ? 'servicio' : 'pieza',
+      description:
+        `Partida ${index + 1}: diagnóstico técnico con caracteres españoles áéíóú ñ. ` +
+        'Descripción extensa para comprobar el crecimiento vertical de la fila, el ajuste de texto y un salto de página estable sin superposición. '.repeat(
+          (index % 3) + 1,
+        ),
+      brand: 'Fabricante industrial',
+      model: `Modelo-muy-largo-${index + 1}-ABC-2026`,
+      originalUnitPrice: 987654.32,
+      discountAmount: index % 2 ? 1234.56 : 0,
+      lineSubtotal: 986419.76 * (index + 1),
+    }));
+    const result = await generateQuotePdf({
+      folio: 'COT-2026-999999',
+      issuedAt: new Date('2026-08-04T18:00:00Z'),
+      clientName: 'Cliente de validación con razón social extensa',
+      siteName: 'Instalación Centro',
+      siteAddress: 'Avenida de la Refrigeración 123, Ciudad de México',
+      equipmentName: 'Unidad condensadora de gran capacidad',
+      items,
+      discountDisplayMode: 'detailed',
+      subtotalOriginal: 99999999.99,
+      discountTotal: 14814.72,
+      subtotalFinal: 99985185.27,
+      taxRate: 0.16,
+      taxTotal: 15997629.64,
+      grandTotal: 115982814.91,
+      currency: 'MXN',
+      validityDays: 30,
+      notes: 'Validación de múltiples partidas y última fila próxima al pie.',
+      paymentMethod: 'Transferencia bancaria',
+      warranty: 'Garantía limitada conforme a condiciones comerciales.',
+      exclusions: 'No incluye maniobras extraordinarias.',
+      watermark: 'ENFRIAMATIC — DOCUMENTO DE PRUEBA DEV',
+    });
+    expect(result.bytes.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+    const physicalPages = result.bytes.toString('latin1').match(/\/Type\s*\/Page\b/g) ?? [];
+    expect(result.pageCount).toBeGreaterThan(2);
+    expect(physicalPages).toHaveLength(result.pageCount);
+    expect(result.bytes.length).toBeLessThan(12 * 1024 * 1024);
+  });
 });

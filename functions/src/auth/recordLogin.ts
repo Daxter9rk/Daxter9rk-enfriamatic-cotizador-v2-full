@@ -14,6 +14,7 @@ export const recordLogin = onCall(
     const actor = await requireActiveActor(request);
     await firestore.doc(`users/${actor.uid}`).update({
       lastLoginAt: FieldValue.serverTimestamp(),
+      lastActivityAt: FieldValue.serverTimestamp(),
     });
     await writeAudit(actor, {
       action: 'auth.login',

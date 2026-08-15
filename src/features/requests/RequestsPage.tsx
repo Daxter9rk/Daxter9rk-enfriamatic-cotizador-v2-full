@@ -1,44 +1,127 @@
 import {useMemo, useState, type FormEvent} from 'react';
-import {useLocation, useSearch} from 'wouter';
+import {Link, useLocation, useRoute, useSearch} from 'wouter';
 import {useAuth} from '../../app/providers/AuthProvider';
+import {Icon} from '../../components/Icon';
+import {FilterBar} from '../../components/FilterBar';
 import {Modal} from '../../components/Modal';
 import {PageHeader} from '../../components/PageHeader';
+import {SearchableSelect} from '../../components/SearchableSelect';
 import {StatePanel} from '../../components/StatePanel';
 import {useCollection} from '../../hooks/useCollection';
+import {useRealtimeCollection} from '../../hooks/useRealtimeCollection';
 import type {Client, Equipment, ServiceRequest, Site, UserProfile} from '../../models/domain';
 import {requestInputSchema} from '../../models/schemas';
-import {constraints, createDocument, updateDocument} from '../../services/firebase/data';
-import {canTransitionRequest} from '../../utils/transitions';
+import {
+  callFunction,
+  constraints,
+  createDocument,
+  updateDocument,
+} from '../../services/firebase/data';
+import {formatDate} from '../../utils/format';
+import {requestRelationshipError, type RequestScope} from '../../utils/requestRelations';
+
+const statusLabels = {
+  pending: 'Pendiente',
+  assigned: 'Asignada',
+  in_progress: 'En progreso',
+  completed: 'Completada',
+  cancelled: 'Cancelada',
+} as const;
+const priorityLabels = {low: 'Baja', normal: 'Normal', high: 'Alta', urgent: 'Urgente'} as const;
 
 export function RequestsPage() {
   const {profile} = useAuth();
   const search = useSearch();
   const [, navigate] = useLocation();
+  const [, routeParams] = useRoute('/requests/:requestId');
   const searchParams = useMemo(() => new URLSearchParams(search), [search]);
+  const requestConstraints = useMemo(
+    () => (profile?.role === 'operator' ? [constraints.assignedTo(profile.uid)] : []),
+    [profile],
+  );
+  const operatorAccess = useMemo(
+    () => (profile?.role === 'operator' ? [constraints.authorizedFor(profile.uid)] : []),
+    [profile],
+  );
+  const requests = useRealtimeCollection<ServiceRequest>(
+    'requests',
+    requestConstraints,
+    100,
+    Boolean(profile),
+  );
+  const clients = useCollection<Client>('clients', operatorAccess);
+  const sites = useCollection<Site>('sites', operatorAccess);
+  const equipment = useCollection<Equipment>('equipment', operatorAccess);
+  const users = useCollection<UserProfile>('users', [], 100, profile?.role === 'admin');
+  const [filter, setFilter] = useState(searchParams.get('status') ?? 'all');
+  const [requestSearch, setRequestSearch] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [responsibleFilter, setResponsibleFilter] = useState('all');
+  const [clientFilter, setClientFilter] = useState('all');
+  const [siteFilter, setSiteFilter] = useState('all');
+  const [fromDate, setFromDate] = useState('');
+  const [sort, setSort] = useState('newest');
+  const [view, setView] = useState<'cards' | 'list' | 'table'>(
+    () =>
+      (localStorage.getItem('enfriamatic-view-requests') as 'cards' | 'list' | 'table') ?? 'cards',
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [action, setAction] = useState<'assign' | 'complete' | 'reopen' | 'cancel' | null>(null);
+  const [draftClientId, setDraftClientId] = useState('');
+  const [draftSiteId, setDraftSiteId] = useState('');
+  const [draftEquipmentId, setDraftEquipmentId] = useState('');
+  const [draftAssignee, setDraftAssignee] = useState('');
+  const [draftScope, setDraftScope] = useState<RequestScope>('site');
+  const selected = requests.data.find((item) => item.id === routeParams?.requestId) ?? null;
+  const creating = searchParams.get('new') === '1';
+
+  const visible = useMemo(() => {
+    const term = requestSearch.trim().toLocaleLowerCase('es-MX');
+    const start = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : 0;
+    return requests.data
+      .filter((item) => {
+        const clientName = clients.data.find((client) => client.id === item.clientId)?.name ?? '';
+        const siteName = sites.data.find((site) => site.id === item.siteId)?.name ?? '';
+        const responsible = users.data.find((user) => user.uid === item.assignedTo);
+        return (
+          (filter === 'all' || item.status === filter) &&
+          (priorityFilter === 'all' || item.priority === priorityFilter) &&
+          (responsibleFilter === 'all' || item.assignedTo === responsibleFilter) &&
+          (clientFilter === 'all' || item.clientId === clientFilter) &&
+          (siteFilter === 'all' || item.siteId === siteFilter) &&
+          (!start || (item.updatedAt?.toMillis?.() ?? 0) >= start) &&
+          (!term ||
+            `${item.title} ${item.description} ${clientName} ${siteName} ${responsible?.displayName ?? ''}`
+              .toLocaleLowerCase('es-MX')
+              .includes(term))
+        );
+      })
+      .sort((left, right) => {
+        if (sort === 'oldest')
+          return (left.updatedAt?.toMillis?.() ?? 0) - (right.updatedAt?.toMillis?.() ?? 0);
+        if (sort === 'priority') return priorityRank(right.priority) - priorityRank(left.priority);
+        if (sort === 'az') return left.title.localeCompare(right.title, 'es-MX');
+        return (right.updatedAt?.toMillis?.() ?? 0) - (left.updatedAt?.toMillis?.() ?? 0);
+      });
+  }, [
+    clientFilter,
+    clients.data,
+    filter,
+    fromDate,
+    priorityFilter,
+    requestSearch,
+    requests.data,
+    responsibleFilter,
+    siteFilter,
+    sites.data,
+    sort,
+    users.data,
+  ]);
   const setSearchParams = (params: Record<string, string>) => {
     const query = new URLSearchParams(params).toString();
     navigate(`/requests${query ? `?${query}` : ''}`, {replace: true});
   };
-  const requestConstraints =
-    profile?.role === 'operator' ? [constraints.assignedTo(profile.uid)] : [];
-  const requests = useCollection<ServiceRequest>('requests', requestConstraints);
-  const operatorAccess =
-    profile?.role === 'operator' ? [constraints.authorizedFor(profile.uid)] : [];
-  const clients = useCollection<Client>('clients', operatorAccess);
-  const sites = useCollection<Site>('sites', operatorAccess);
-  const equipment = useCollection<Equipment>('equipment', operatorAccess);
-  const users = useCollection<UserProfile>('users', [], 50, profile?.role === 'admin');
-  const [filter, setFilter] = useState('all');
-  const [selected, setSelected] = useState<ServiceRequest | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const creating = searchParams.get('new') === '1';
-
-  const visible = useMemo(
-    () =>
-      filter === 'all' ? requests.data : requests.data.filter((item) => item.status === filter),
-    [filter, requests.data],
-  );
 
   const create = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -52,11 +135,20 @@ export function RequestsPage() {
         clientId: form.get('clientId'),
         siteId: form.get('siteId'),
         equipmentId: String(form.get('equipmentId') ?? '') || null,
+        scope: form.get('scope'),
         title: form.get('title'),
         description: form.get('description'),
         priority: form.get('priority'),
         assignedTo,
       });
+      const relationError = requestRelationshipError({
+        ...data,
+        equipmentId: data.equipmentId ?? null,
+        clients: clients.data,
+        sites: sites.data,
+        equipment: equipment.data,
+      });
+      if (relationError) throw new Error(relationError);
       await createDocument(
         'requests',
         {
@@ -70,7 +162,6 @@ export function RequestsPage() {
         profile.uid,
       );
       setSearchParams({});
-      await requests.reload();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No fue posible crear la solicitud.');
     } finally {
@@ -78,27 +169,55 @@ export function RequestsPage() {
     }
   };
 
-  const transition = async (request: ServiceRequest, nextStatus: ServiceRequest['status']) => {
-    if (!profile || !canTransitionRequest(request.status, nextStatus)) return;
+  const transition = async (
+    request: ServiceRequest,
+    to: 'in_progress' | 'completed' | 'cancelled',
+    reason?: string | null,
+    finalNote?: string | null,
+  ) => {
     setSaving(true);
+    setError(null);
     try {
-      await updateDocument(
-        'requests',
-        request.id,
-        {
-          status: nextStatus,
-          ...(nextStatus === 'completed' ? {completedAt: new Date()} : {}),
-        },
-        profile.uid,
-      );
-      setSelected(null);
-      await requests.reload();
+      await callFunction('transitionRequest', {
+        requestId: request.id,
+        to,
+        reason: reason ?? null,
+        finalNote: finalNote ?? null,
+      });
+      setAction(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No fue posible cambiar el estado.');
     } finally {
       setSaving(false);
     }
   };
 
   if (requests.loading) return <StatePanel kind="loading" title="Cargando solicitudes…" />;
+  if (routeParams?.requestId && !selected)
+    return (
+      <StatePanel kind="error" title="Solicitud no disponible">
+        <p>No existe, quedó fuera del alcance de tu perfil o no tienes permiso.</p>
+        <Link className="button button--secondary" href="/requests">
+          Volver a solicitudes
+        </Link>
+      </StatePanel>
+    );
+  if (selected)
+    return (
+      <RequestDetail
+        request={selected}
+        clients={clients.data}
+        sites={sites.data}
+        equipment={equipment.data}
+        users={users.data}
+        profile={profile!}
+        action={action}
+        setAction={setAction}
+        saving={saving}
+        error={error}
+        transition={transition}
+      />
+    );
 
   return (
     <>
@@ -113,25 +232,131 @@ export function RequestsPage() {
               onClick={() => setSearchParams({new: '1'})}
               data-testid="new-request"
             >
+              <Icon name="plus" />
               Nueva solicitud
             </button>
           ) : undefined
         }
       />
-      <section className="toolbar">
+      <FilterBar
+        search={requestSearch}
+        searchPlaceholder="Título, cliente, instalación o responsable…"
+        sort={sort}
+        sortOptions={[
+          {value: 'newest', label: 'Más recientes'},
+          {value: 'oldest', label: 'Más antiguas'},
+          {value: 'priority', label: 'Mayor prioridad'},
+          {value: 'az', label: 'A–Z'},
+        ]}
+        onSearch={setRequestSearch}
+        onSort={setSort}
+        onClear={() => {
+          setRequestSearch('');
+          setFilter('all');
+          setPriorityFilter('all');
+          setResponsibleFilter('all');
+          setClientFilter('all');
+          setSiteFilter('all');
+          setFromDate('');
+          setSort('newest');
+          navigate('/requests', {replace: true});
+        }}
+      >
         <label>
           Estado
-          <select value={filter} onChange={(event) => setFilter(event.target.value)}>
+          <select
+            value={filter}
+            onChange={(event) => {
+              setFilter(event.target.value);
+              navigate(
+                event.target.value === 'all'
+                  ? '/requests'
+                  : `/requests?status=${event.target.value}`,
+                {replace: true},
+              );
+            }}
+          >
             <option value="all">Todos</option>
-            <option value="pending">Pendientes</option>
-            <option value="assigned">Asignadas</option>
-            <option value="in_progress">En progreso</option>
-            <option value="completed">Completadas</option>
-            <option value="cancelled">Canceladas</option>
+            {Object.entries(statusLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
           </select>
         </label>
+        <label>
+          Prioridad
+          <select
+            value={priorityFilter}
+            onChange={(event) => setPriorityFilter(event.target.value)}
+          >
+            <option value="all">Todas</option>
+            {Object.entries(priorityLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {profile?.role === 'admin' && (
+          <label>
+            Responsable
+            <select
+              value={responsibleFilter}
+              onChange={(event) => setResponsibleFilter(event.target.value)}
+            >
+              <option value="all">Todos</option>
+              {users.data
+                .filter((user) => user.status === 'active')
+                .map((user) => (
+                  <option key={user.uid} value={user.uid}>
+                    {user.displayName}
+                  </option>
+                ))}
+            </select>
+          </label>
+        )}
+        <label>
+          Cliente
+          <select
+            value={clientFilter}
+            onChange={(event) => {
+              setClientFilter(event.target.value);
+              setSiteFilter('all');
+            }}
+          >
+            <option value="all">Todos</option>
+            {clients.data.map((client) => (
+              <option key={client.id} value={client.id}>
+                {client.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Instalación
+          <select value={siteFilter} onChange={(event) => setSiteFilter(event.target.value)}>
+            <option value="all">Todas</option>
+            {sites.data
+              .filter((site) => clientFilter === 'all' || site.clientId === clientFilter)
+              .map((site) => (
+                <option key={site.id} value={site.id}>
+                  {site.name}
+                </option>
+              ))}
+          </select>
+        </label>
+        <label>
+          Desde
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(event) => setFromDate(event.target.value)}
+          />
+        </label>
+        <ViewToggle view={view} setView={setView} />
         <span>{visible.length} resultados</span>
-      </section>
+      </FilterBar>
       {requests.error ? (
         <StatePanel kind="error" title="No fue posible cargar las solicitudes">
           <p>{requests.error}</p>
@@ -139,71 +364,121 @@ export function RequestsPage() {
       ) : visible.length === 0 ? (
         <StatePanel title="No hay solicitudes para este filtro" />
       ) : (
-        <section className="record-grid">
+        <section className={`record-grid record-grid--${view}`}>
           {visible.map((request) => (
-            <button
-              className="record-card record-card--button"
-              key={request.id}
-              onClick={() => setSelected(request)}
-              data-testid={`request-${request.id}`}
-            >
+            <article className="record-card" key={request.id}>
               <div className="record-card__top">
-                <span className={`badge badge--${request.status}`}>{request.status}</span>
-                <span className={`priority priority--${request.priority}`}>{request.priority}</span>
+                <span className={`badge badge--${request.status}`}>
+                  {statusLabels[request.status]}
+                </span>
+                <span className={`priority priority--${request.priority}`}>
+                  {priorityLabels[request.priority]}
+                </span>
               </div>
-              <h2>{request.title}</h2>
+              <h2>
+                <Link href={`/requests/${request.id}`}>{request.title}</Link>
+              </h2>
               <p>{request.description}</p>
               <small>
                 {clients.data.find((client) => client.id === request.clientId)?.name ??
-                  request.clientId}
+                  'Cliente no disponible'}{' '}
+                · {formatDate(request.updatedAt)}
               </small>
-            </button>
+              <Link className="record-card__open" href={`/requests/${request.id}`}>
+                Abrir seguimiento <span>→</span>
+              </Link>
+            </article>
           ))}
         </section>
       )}
       {creating && (
         <Modal title="Nueva solicitud" onClose={() => setSearchParams({})}>
           <form className="form-grid" onSubmit={(event) => void create(event)}>
-            <label>
-              Cliente
-              <select name="clientId" required>
-                <option value="">Selecciona</option>
-                {clients.data.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Instalación
-              <select name="siteId" required>
-                <option value="">Selecciona</option>
-                {sites.data.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Equipo
-              <select name="equipmentId">
-                <option value="">Sin equipo</option>
-                {equipment.data.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <SearchableSelect
+              name="clientId"
+              label="Cliente"
+              required
+              placeholder="Buscar cliente…"
+              value={draftClientId}
+              options={clients.data
+                .filter((item) => item.status === 'active')
+                .map((item) => ({value: item.id, label: item.name}))}
+              onChange={(value) => {
+                setDraftClientId(value);
+                setDraftSiteId('');
+                setDraftEquipmentId('');
+              }}
+            />
+            <SearchableSelect
+              name="siteId"
+              label="Instalación"
+              required
+              disabled={!draftClientId}
+              placeholder="Buscar instalación…"
+              value={draftSiteId}
+              options={sites.data
+                .filter((item) => item.status === 'active' && item.clientId === draftClientId)
+                .map((item) => ({value: item.id, label: item.name}))}
+              onChange={(value) => {
+                setDraftSiteId(value);
+                setDraftEquipmentId('');
+              }}
+            />
+            <fieldset className="field-wide request-scope">
+              <legend>Alcance de la solicitud</legend>
+              <label className="checkbox">
+                <input
+                  name="scope"
+                  type="radio"
+                  value="site"
+                  checked={draftScope === 'site'}
+                  onChange={() => {
+                    setDraftScope('site');
+                    setDraftEquipmentId('');
+                  }}
+                />
+                Instalación completa o diagnóstico general
+              </label>
+              <label className="checkbox">
+                <input
+                  name="scope"
+                  type="radio"
+                  value="equipment"
+                  checked={draftScope === 'equipment'}
+                  onChange={() => setDraftScope('equipment')}
+                />
+                Equipo específico
+              </label>
+            </fieldset>
+            <SearchableSelect
+              name="equipmentId"
+              label="Equipo"
+              required={draftScope === 'equipment'}
+              disabled={!draftSiteId || draftScope === 'site'}
+              placeholder="Buscar equipo…"
+              value={draftEquipmentId}
+              options={equipment.data
+                .filter(
+                  (item) =>
+                    item.status === 'active' &&
+                    item.clientId === draftClientId &&
+                    item.siteId === draftSiteId,
+                )
+                .map((item) => ({
+                  value: item.id,
+                  label: item.name,
+                  keywords: `${item.brand ?? ''} ${item.model ?? ''} ${item.serialNumber ?? ''}`,
+                }))}
+              onChange={setDraftEquipmentId}
+            />
             <label>
               Prioridad
               <select name="priority" defaultValue="normal">
-                <option value="low">Baja</option>
-                <option value="normal">Normal</option>
-                <option value="high">Alta</option>
-                <option value="urgent">Urgente</option>
+                {Object.entries(priorityLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="field-wide">
@@ -214,19 +489,14 @@ export function RequestsPage() {
               Descripción
               <textarea name="description" required maxLength={4000} />
             </label>
-            <label className="field-wide">
-              Asignar a
-              <select name="assignedTo">
-                <option value="">Sin asignar</option>
-                {users.data
-                  .filter((item) => item.role === 'operator' && item.status === 'active')
-                  .map((item) => (
-                    <option key={item.uid} value={item.uid}>
-                      {item.displayName}
-                    </option>
-                  ))}
-              </select>
-            </label>
+            <SearchableSelect
+              name="assignedTo"
+              label="Responsable (opcional)"
+              placeholder="Buscar por nombre o correo…"
+              value={draftAssignee}
+              options={assigneeOptions(users.data)}
+              onChange={setDraftAssignee}
+            />
             {error && <p className="form-message form-message--error field-wide">{error}</p>}
             <button className="button button--primary field-wide" disabled={saving}>
               {saving ? 'Guardando…' : 'Crear solicitud'}
@@ -234,57 +504,371 @@ export function RequestsPage() {
           </form>
         </Modal>
       )}
-      {selected && (
-        <Modal title={selected.title} onClose={() => setSelected(null)}>
-          <div className="detail-stack">
-            <span className={`badge badge--${selected.status}`}>{selected.status}</span>
-            <p>{selected.description}</p>
-            <dl>
-              <div>
-                <dt>Prioridad</dt>
-                <dd>{selected.priority}</dd>
-              </div>
-              <div>
-                <dt>Asignado</dt>
-                <dd>
-                  {users.data.find((item) => item.uid === selected.assignedTo)?.displayName ??
-                    'Sin asignar'}
-                </dd>
-              </div>
-            </dl>
-            <div className="button-row">
-              {selected.status === 'assigned' && (
-                <button
-                  className="button button--primary"
-                  disabled={saving}
-                  onClick={() => void transition(selected, 'in_progress')}
-                >
-                  Iniciar solicitud
+    </>
+  );
+}
+
+function RequestDetail({
+  request,
+  clients,
+  sites,
+  equipment,
+  users,
+  profile,
+  action,
+  setAction,
+  saving,
+  error,
+  transition,
+}: {
+  request: ServiceRequest;
+  clients: Client[];
+  sites: Site[];
+  equipment: Equipment[];
+  users: UserProfile[];
+  profile: UserProfile;
+  action: 'assign' | 'complete' | 'reopen' | 'cancel' | null;
+  setAction(value: 'assign' | 'complete' | 'reopen' | 'cancel' | null): void;
+  saving: boolean;
+  error: string | null;
+  transition(
+    request: ServiceRequest,
+    to: 'in_progress' | 'completed' | 'cancelled',
+    reason?: string | null,
+    finalNote?: string | null,
+  ): Promise<void>;
+}) {
+  const client = clients.find((item) => item.id === request.clientId);
+  const site = sites.find((item) => item.id === request.siteId);
+  const unit = equipment.find((item) => item.id === request.equipmentId);
+  const assignee =
+    users.find((item) => item.uid === request.assignedTo) ??
+    (request.assignedTo === profile.uid ? profile : undefined);
+  const saveNotes = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const value = String(new FormData(event.currentTarget).get('workNotes') ?? '').trim();
+    await updateDocument('requests', request.id, {workNotes: value}, profile.uid);
+  };
+  const assign = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    await callFunction('assignRequest', {
+      requestId: request.id,
+      assignedTo: String(form.get('assignedTo')),
+      note: String(form.get('note') ?? '') || null,
+    });
+    setAction(null);
+  };
+  const submitAction = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    if (action === 'complete')
+      await transition(request, 'completed', null, String(form.get('finalNote') ?? '') || null);
+    if (action === 'reopen')
+      await transition(request, 'in_progress', String(form.get('reason') ?? ''));
+    if (action === 'cancel')
+      await transition(request, 'cancelled', String(form.get('reason') ?? ''));
+  };
+  return (
+    <>
+      <PageHeader
+        eyebrow="Solicitud · Seguimiento"
+        title={request.title}
+        description={`${statusLabels[request.status]} · Prioridad ${priorityLabels[request.priority]}`}
+        actions={
+          <div className="button-row">
+            <Link className="button button--ghost" href="/requests">
+              Volver
+            </Link>
+            {profile.role === 'admin' &&
+              ['pending', 'assigned', 'in_progress'].includes(request.status) && (
+                <button className="button button--secondary" onClick={() => setAction('assign')}>
+                  {request.assignedTo ? 'Reasignar solicitud' : 'Asignar responsable'}
                 </button>
               )}
-              {selected.status === 'in_progress' && (
-                <button
-                  className="button button--primary"
-                  disabled={saving}
-                  onClick={() => void transition(selected, 'completed')}
-                >
-                  Completar
-                </button>
-              )}
-              {profile?.role === 'admin' &&
-                ['pending', 'assigned', 'in_progress'].includes(selected.status) && (
-                  <button
-                    className="button button--danger"
-                    disabled={saving}
-                    onClick={() => void transition(selected, 'cancelled')}
-                  >
-                    Cancelar
-                  </button>
+          </div>
+        }
+      />
+      <RequestStepper status={request.status} />
+      <div className="request-detail-grid">
+        <section className="panel entity-summary">
+          <div className="panel__header">
+            <div>
+              <p className="eyebrow">Información</p>
+              <h2>Detalles de la solicitud</h2>
+            </div>
+            <span className={`badge badge--${request.status}`}>{statusLabels[request.status]}</span>
+          </div>
+          <p>{request.description}</p>
+          <dl className="definition-grid">
+            <div>
+              <dt>Cliente</dt>
+              <dd>
+                {client ? (
+                  <Link href={`/clients/${client.id}`}>{client.name}</Link>
+                ) : (
+                  request.clientId
                 )}
+              </dd>
+            </div>
+            <div>
+              <dt>Instalación</dt>
+              <dd>{site ? <Link href={`/sites/${site.id}`}>{site.name}</Link> : request.siteId}</dd>
+            </div>
+            <div>
+              <dt>Equipo</dt>
+              <dd>
+                {unit ? <Link href={`/equipment/${unit.id}`}>{unit.name}</Link> : 'Sin equipo'}
+              </dd>
+            </div>
+            <div>
+              <dt>Responsable</dt>
+              <dd>
+                {assignee
+                  ? `${assignee.displayName} · ${assignee.role === 'admin' ? 'Administrador' : 'Operador'}`
+                  : 'Sin asignar'}
+              </dd>
+            </div>
+            <div>
+              <dt>Actualizada</dt>
+              <dd>{formatDate(request.updatedAt)}</dd>
+            </div>
+          </dl>
+        </section>
+        <section className="panel entity-summary">
+          <div className="panel__header">
+            <div>
+              <p className="eyebrow">Acciones</p>
+              <h2>Avance controlado</h2>
             </div>
           </div>
+          <div className="request-actions">
+            {request.status === 'assigned' && (
+              <button
+                className="button button--primary"
+                disabled={saving}
+                onClick={() => void transition(request, 'in_progress')}
+              >
+                Iniciar solicitud
+              </button>
+            )}
+            {request.status === 'in_progress' && (
+              <button
+                className="button button--primary"
+                disabled={saving}
+                onClick={() => setAction('complete')}
+              >
+                Marcar como completada
+              </button>
+            )}
+            {profile.role === 'admin' &&
+              ['pending', 'assigned', 'in_progress'].includes(request.status) && (
+                <button
+                  className="button button--danger"
+                  disabled={saving}
+                  onClick={() => setAction('cancel')}
+                >
+                  Cancelar solicitud
+                </button>
+              )}
+            {profile.role === 'admin' && request.status === 'completed' && (
+              <button
+                className="button button--secondary"
+                disabled={saving}
+                onClick={() => setAction('reopen')}
+              >
+                Reabrir con motivo
+              </button>
+            )}
+          </div>
+          {request.finalNote && (
+            <p className="form-message form-message--success">Nota final: {request.finalNote}</p>
+          )}
+          {request.reopenReason && (
+            <p className="form-message">Motivo de reapertura: {request.reopenReason}</p>
+          )}
+        </section>
+      </div>
+      <section className="panel entity-section">
+        <div className="panel__header">
+          <div>
+            <p className="eyebrow">Bitácora</p>
+            <h2>Notas de trabajo</h2>
+          </div>
+        </div>
+        <form className="form-grid" onSubmit={(event) => void saveNotes(event)}>
+          <label className="field-wide">
+            <span className="sr-only">Notas de trabajo</span>
+            <textarea
+              name="workNotes"
+              maxLength={2000}
+              defaultValue={request.workNotes ?? ''}
+              disabled={['completed', 'cancelled'].includes(request.status)}
+            />
+          </label>
+          {!['completed', 'cancelled'].includes(request.status) && (
+            <button className="button button--secondary field-wide">Guardar notas</button>
+          )}
+        </form>
+      </section>
+      {request.assignmentHistory && request.assignmentHistory.length > 0 && (
+        <section className="panel entity-section">
+          <div className="panel__header">
+            <div>
+              <p className="eyebrow">Trazabilidad</p>
+              <h2>Historial de asignaciones</h2>
+            </div>
+          </div>
+          <div className="timeline">
+            {request.assignmentHistory.map((item, index) => (
+              <article key={`${item.assignedTo}-${index}`}>
+                <span />
+                <div>
+                  <strong>
+                    {users.find((user) => user.uid === item.assignedTo)?.displayName ??
+                      'Usuario asignado'}
+                  </strong>
+                  <p>{item.note || 'Asignación operativa'}</p>
+                  <small>{formatDate(item.assignedAt)}</small>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+      {action && (
+        <Modal
+          title={
+            action === 'assign'
+              ? 'Asignar solicitud'
+              : action === 'complete'
+                ? 'Confirmar finalización'
+                : action === 'reopen'
+                  ? 'Reabrir solicitud'
+                  : 'Cancelar solicitud'
+          }
+          onClose={() => setAction(null)}
+        >
+          <form
+            className="form-grid"
+            onSubmit={(event) => void (action === 'assign' ? assign(event) : submitAction(event))}
+          >
+            {action === 'assign' ? (
+              <AssignmentFields request={request} users={users} />
+            ) : action === 'complete' ? (
+              <>
+                <p className="field-wide">
+                  Se registrará quién completa el trabajo y la fecha. Verifica que el seguimiento
+                  esté listo.
+                </p>
+                <label className="field-wide">
+                  Nota final
+                  <textarea name="finalNote" maxLength={2000} />
+                </label>
+              </>
+            ) : (
+              <label className="field-wide">
+                Motivo obligatorio
+                <textarea name="reason" required minLength={5} maxLength={1000} />
+              </label>
+            )}
+            {error && <p className="form-message form-message--error field-wide">{error}</p>}
+            <button
+              className={`button ${action === 'cancel' ? 'button--danger' : 'button--primary'} field-wide`}
+              disabled={saving}
+            >
+              {saving ? 'Procesando…' : 'Confirmar'}
+            </button>
+          </form>
         </Modal>
       )}
     </>
   );
+}
+
+function RequestStepper({status}: {status: ServiceRequest['status']}) {
+  const stages = ['pending', 'assigned', 'in_progress', 'completed'] as const;
+  const current = stages.indexOf(status as (typeof stages)[number]);
+  return (
+    <section
+      className={`request-stepper ${status === 'cancelled' ? 'request-stepper--cancelled' : ''}`}
+      aria-label="Progreso de la solicitud"
+    >
+      {stages.map((stage, index) => (
+        <div
+          className={status !== 'cancelled' && index <= current ? 'complete' : undefined}
+          key={stage}
+        >
+          <span>{index + 1}</span>
+          <strong>{statusLabels[stage]}</strong>
+        </div>
+      ))}
+      {status === 'cancelled' && <p>Solicitud cancelada</p>}
+    </section>
+  );
+}
+function ViewToggle({
+  view,
+  setView,
+}: {
+  view: 'cards' | 'list' | 'table';
+  setView(value: 'cards' | 'list' | 'table'): void;
+}) {
+  return (
+    <div className="view-toggle">
+      {(['cards', 'list', 'table'] as const).map((option) => (
+        <button
+          key={option}
+          className={view === option ? 'active' : undefined}
+          onClick={() => {
+            setView(option);
+            localStorage.setItem('enfriamatic-view-requests', option);
+          }}
+        >
+          {{cards: 'Tarjetas', list: 'Lista', table: 'Tabla'}[option]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function assigneeOptions(users: UserProfile[]) {
+  return users
+    .filter((item) => item.status === 'active')
+    .sort((left, right) => left.displayName.localeCompare(right.displayName, 'es-MX'))
+    .map((item) => ({
+      value: item.uid,
+      label: `${item.displayName} — ${item.role === 'admin' ? 'Administrador/a' : 'Operador/a'}`,
+      keywords: item.email,
+    }));
+}
+
+function AssignmentFields({request, users}: {request: ServiceRequest; users: UserProfile[]}) {
+  const [assignedTo, setAssignedTo] = useState(request.assignedTo ?? '');
+  return (
+    <>
+      <SearchableSelect
+        name="assignedTo"
+        label="Responsable"
+        required
+        placeholder="Buscar por nombre o correo…"
+        value={assignedTo}
+        options={assigneeOptions(users)}
+        onChange={setAssignedTo}
+      />
+      <label className="field-wide">
+        {request.assignedTo ? 'Motivo de reasignación' : 'Nota de asignación'}
+        <input
+          name="note"
+          required={Boolean(request.assignedTo && assignedTo !== request.assignedTo)}
+          minLength={request.assignedTo && assignedTo !== request.assignedTo ? 5 : undefined}
+          maxLength={500}
+        />
+      </label>
+    </>
+  );
+}
+
+function priorityRank(priority: ServiceRequest['priority']) {
+  return {low: 0, normal: 1, high: 2, urgent: 3}[priority];
 }

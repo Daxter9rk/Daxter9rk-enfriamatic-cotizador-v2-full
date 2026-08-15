@@ -4,6 +4,7 @@ import {Modal} from '../../components/Modal';
 import type {
   CatalogItem,
   Client,
+  Equipment,
   Quote,
   QuoteItem,
   QuoteStatus,
@@ -12,15 +13,22 @@ import type {
 } from '../../models/domain';
 import {quoteItemInputSchema} from '../../models/schemas';
 import {
+  calculateItem,
+  calculateQuoteTotals,
+  createQuoteItemFromCatalog,
+  discountModeLabel,
+  updateQuoteRecord,
+  quoteStatusLabel,
+} from '../../modules/quotes';
+import {
   callFunction,
   deleteQuoteItem,
   listQuoteItems,
   saveQuoteItem,
   updateDocument,
 } from '../../services/firebase/data';
-import {calculateItem, calculateQuoteTotals, discountModeLabel} from '../../utils/calculations';
-import {catalogItemToQuoteInput, matchesCatalogSearch} from '../../utils/catalog';
-import {formatCurrency, safeFileName} from '../../utils/format';
+import {matchesCatalogSearch} from '../../utils/catalog';
+import {formatCurrency, formatDate, safeFileName} from '../../utils/format';
 
 interface IssueResult {
   quoteId: string;
@@ -34,6 +42,14 @@ interface DownloadResult {
   fileName: string;
 }
 
+interface CorrectionResult {
+  quoteId: string;
+  requestId: string | null;
+  folio: string;
+  revisionNumber: number;
+  idempotent: boolean;
+}
+
 export function QuoteEditor({
   quote,
   profileId,
@@ -41,8 +57,10 @@ export function QuoteEditor({
   catalog,
   client,
   site,
+  equipment,
   onClose,
   onChanged,
+  onCorrectionCreated,
 }: {
   quote: Quote;
   profileId: string;
@@ -50,13 +68,17 @@ export function QuoteEditor({
   catalog: CatalogItem[];
   client: Client | undefined;
   site: Site | undefined;
+  equipment: Equipment | undefined;
   onClose(): void;
   onChanged(): Promise<void>;
+  onCorrectionCreated?(quoteId: string): Promise<void>;
 }) {
   const [items, setItems] = useState<QuoteItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [serviceReference, setServiceReference] = useState(quote.serviceReference ?? '');
+  const [technicalContext, setTechnicalContext] = useState(quote.technicalContext ?? '');
   const [preview, setPreview] = useState(false);
   const [editingItem, setEditingItem] = useState<QuoteItem | null>(null);
   const [catalogSearch, setCatalogSearch] = useState('');
@@ -127,7 +149,7 @@ export function QuoteEditor({
     setBusy(true);
     setMessage(null);
     try {
-      const parsed = quoteItemInputSchema.parse(catalogItemToQuoteInput(item, items.length));
+      const parsed = quoteItemInputSchema.parse(createQuoteItemFromCatalog(item, items.length));
       await saveQuoteItem(quote.id, null, {...parsed, ...calculateItem(parsed)});
       await persistTotals();
     } catch (error) {
@@ -161,10 +183,34 @@ export function QuoteEditor({
           idempotencyKey: crypto.randomUUID(),
         },
       );
-      setMessage(`Cotización ${result.folio} emitida correctamente.`);
       await onChanged();
+      setMessage(`Cotización ${result.folio} emitida correctamente.`);
     } catch {
       setMessage('La emisión no concluyó. El borrador permanece editable y puede reintentarse.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveDetails = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy(true);
+    setMessage(null);
+    try {
+      const form = new FormData(event.currentTarget);
+      await updateQuoteRecord(
+        quote,
+        {
+          notes: String(form.get('notes') ?? ''),
+          serviceReference,
+          technicalContext,
+        },
+        {id: profileId, role: profileRole},
+      );
+      await onChanged();
+      setMessage('Datos de la cotizaciÃ³n guardados.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudieron guardar los datos.');
     } finally {
       setBusy(false);
     }
@@ -192,11 +238,16 @@ export function QuoteEditor({
 
   const correction = async () => {
     setBusy(true);
+    setMessage(null);
     try {
-      await callFunction('createCorrection', {quoteId: quote.id});
-      setMessage('Corrección creada con una nueva solicitud y cotización relacionadas.');
-    } catch {
-      setMessage('No se pudo crear la corrección.');
+      const result = await callFunction<
+        {quoteId: string; idempotencyKey: string},
+        CorrectionResult
+      >('createCorrection', {quoteId: quote.id, idempotencyKey: crypto.randomUUID()});
+      if (onCorrectionCreated) await onCorrectionCreated(result.quoteId);
+      else setMessage(`Se creó la revisión ${result.revisionNumber} como borrador editable.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo crear la corrección.');
     } finally {
       setBusy(false);
     }
@@ -214,9 +265,9 @@ export function QuoteEditor({
         to: transitionTarget,
         reason: String(form.get('reason') ?? '').trim() || null,
       });
-      setMessage(`Estado actualizado a ${transitionLabel(transitionTarget)}.`);
       setTransitionTarget(null);
       await onChanged();
+      setMessage(`Estado actualizado a ${quoteStatusLabel(transitionTarget)}.`);
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : 'No se pudo actualizar el estado comercial.',
@@ -237,17 +288,64 @@ export function QuoteEditor({
             </div>
             <div>
               <span>Instalación</span>
-              <strong>{site?.name ?? quote.siteId}</strong>
+              {quote.siteId ? (
+                <strong>{site?.name ?? quote.siteId}</strong>
+              ) : (
+                <strong>Sin instalaciÃ³n vinculada</strong>
+              )}
             </div>
             <div>
               <span>Estado</span>
-              <strong>{transitionLabel(quote.status)}</strong>
+              <strong>{quoteStatusLabel(quote.status)}</strong>
             </div>
           </header>
           {loading ? (
             <p>Cargando partidas…</p>
           ) : (
             <>
+              {quote.status === 'rejected' && quote.lastRejectionReason && (
+                <section className="quote-rejection" role="status">
+                  <strong>Cotización rechazada</strong>
+                  <p>Motivo: {quote.lastRejectionReason}</p>
+                  <small>
+                    Registrado por {quote.lastRejectedByName || 'Administrador/a'} ·{' '}
+                    {quote.lastRejectedByRole === 'operator' ? 'Operador/a' : 'Administrador/a'} ·{' '}
+                    {quote.lastRejectedAt ? formatDate(quote.lastRejectedAt) : 'Fecha registrada'}
+                  </small>
+                </section>
+              )}
+              {!quote.locked && (
+                <form
+                  className="form-grid quote-context-form"
+                  onSubmit={(event) => void saveDetails(event)}
+                >
+                  <label>
+                    Referencia de servicio
+                    <input
+                      name="serviceReference"
+                      value={serviceReference}
+                      maxLength={500}
+                      onChange={(event) => setServiceReference(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Contexto tÃ©cnico
+                    <textarea
+                      name="technicalContext"
+                      value={technicalContext}
+                      maxLength={2000}
+                      onChange={(event) => setTechnicalContext(event.target.value)}
+                    />
+                  </label>
+                  <label className="field-wide">
+                    Notas
+                    <textarea name="notes" defaultValue={quote.notes ?? ''} maxLength={4000} />
+                  </label>
+                  <button className="button button--secondary field-wide" disabled={busy}>
+                    Guardar datos de cotizaciÃ³n
+                  </button>
+                </form>
+              )}
               <div className="quote-items">
                 {items.length === 0 ? (
                   <p className="empty-copy">Agrega al menos una partida para emitir.</p>
@@ -306,7 +404,11 @@ export function QuoteEditor({
                     onClick={() => void issue()}
                     data-testid="issue-quote"
                   >
-                    {busy ? 'Procesando…' : 'Generar PDF y emitir'}
+                    {quote.requestId !== undefined
+                      ? busy
+                        ? 'Procesando…'
+                        : 'Generar PDF y emitir'
+                      : 'Emisión no disponible'}
                   </button>
                 )}
                 {quote.documentStatus === 'ready' && (
@@ -336,6 +438,23 @@ export function QuoteEditor({
                 onTarget={setTransitionTarget}
                 onSubmit={transition}
               />
+              {quote.commercialHistory && quote.commercialHistory.length > 0 && (
+                <section className="commercial-history">
+                  <h3>Historial comercial</h3>
+                  {quote.commercialHistory.map((event, index) => (
+                    <article key={`${event.to}-${index}`}>
+                      <strong>
+                        {quoteStatusLabel(event.from)} → {quoteStatusLabel(event.to)}
+                      </strong>
+                      {event.reason && <p>Motivo: {event.reason}</p>}
+                      <small>
+                        {event.actorName || 'Usuario autorizado'} ·{' '}
+                        {event.at ? formatDate(event.at) : 'Fecha registrada'}
+                      </small>
+                    </article>
+                  ))}
+                </section>
+              )}
               {message && (
                 <p className="form-message" role="status">
                   {message}
@@ -362,6 +481,7 @@ export function QuoteEditor({
           items={items}
           client={client}
           site={site}
+          equipment={equipment}
           totals={totals}
           onClose={() => setPreview(false)}
         />
@@ -627,7 +747,7 @@ function CommercialActions({
           <p>
             Confirmar transición:{' '}
             <strong>
-              {transitionLabel(quote.status)} → {transitionLabel(target)}
+              {quoteStatusLabel(quote.status)} → {quoteStatusLabel(target)}
             </strong>
           </p>
           {['rejected', 'cancelled'].includes(target) && (
@@ -655,6 +775,7 @@ function Preview({
   items,
   client,
   site,
+  equipment,
   totals,
   onClose,
 }: {
@@ -662,44 +783,106 @@ function Preview({
   items: QuoteItem[];
   client: Client | undefined;
   site: Site | undefined;
+  equipment: Equipment | undefined;
   totals: ReturnType<typeof calculateQuoteTotals>;
   onClose(): void;
 }) {
+  const pages = chunkQuoteItems(items, 10);
   return (
     <div className="preview-overlay">
       <button className="icon-button" aria-label="Cerrar vista previa" onClick={onClose}>
         ×
       </button>
-      <article className="quote-preview">
-        <h2>{quote.folio || 'BORRADOR'}</h2>
-        <p>
-          {client?.name} · {site?.name}
-        </p>
-        <p>{discountModeLabel[quote.discountDisplayMode]}</p>
-        {items.map((item) => (
-          <div key={item.id}>
-            <span>
-              {item.quantity} × {item.description}
-            </span>
-            <strong>{formatCurrency(item.lineSubtotal)}</strong>
-          </div>
+      <section className="quote-preview-pages" aria-label="Vista previa del documento">
+        {pages.map((pageItems, pageIndex) => (
+          <article className="quote-preview" key={pageIndex}>
+            <span className="quote-preview__watermark">DOCUMENTO DE PRUEBA DEV</span>
+            <header className="quote-preview__header">
+              <div>
+                <strong>ENFRIAMATIC</strong>
+                <small>Cotizador V2.1</small>
+              </div>
+              <div>
+                <h2>{quote.folio || 'BORRADOR'}</h2>
+                <span>
+                  Fecha: {formatDate(quote.issuedAt ?? quote.createdAt)} · Vigencia:{' '}
+                  {quote.validityDays} días
+                </span>
+              </div>
+            </header>
+            <section className="quote-preview__customer">
+              <div>
+                <span>Cliente</span>
+                <strong>{client?.name ?? quote.clientId}</strong>
+              </div>
+              {quote.siteId && (
+                <div>
+                  <span>Instalación</span>
+                  <strong>{site?.name ?? quote.siteId}</strong>
+                </div>
+              )}
+              {quote.serviceReference && (
+                <div>
+                  <span>Referencia de servicio</span>
+                  <strong>{quote.serviceReference}</strong>
+                </div>
+              )}
+              {quote.technicalContext && (
+                <div>
+                  <span>Contexto técnico</span>
+                  <strong>{quote.technicalContext}</strong>
+                </div>
+              )}
+              {quote.equipmentId && (
+                <div>
+                  <span>Equipo</span>
+                  <strong>{equipment?.name ?? quote.equipmentId}</strong>
+                </div>
+              )}
+            </section>
+            <div className="quote-preview__table">
+              <div className="quote-preview__row quote-preview__row--head">
+                <span>Cant.</span>
+                <span>Descripción</span>
+                <span>Precio</span>
+                <span>Importe</span>
+              </div>
+              {pageItems.map((item) => (
+                <div className="quote-preview__row" key={item.id}>
+                  <span>
+                    {item.quantity} {item.unit}
+                  </span>
+                  <span>{item.description}</span>
+                  <span>{formatCurrency(item.finalUnitPrice)}</span>
+                  <strong>{formatCurrency(item.lineSubtotal)}</strong>
+                </div>
+              ))}
+            </div>
+            {pageIndex === pages.length - 1 && (
+              <div className="quote-preview__closing">
+                <section>
+                  <strong>Condiciones comerciales</strong>
+                  <p>{quote.notes || 'Precios en MXN. Vigencia indicada en este documento.'}</p>
+                  <small>{discountModeLabel[quote.discountDisplayMode]}</small>
+                </section>
+                <Totals quote={quote} totals={totals} />
+              </div>
+            )}
+            <footer>
+              Página {pageIndex + 1} de {pages.length} · Enfriamatic
+            </footer>
+          </article>
         ))}
-        <footer>Total {formatCurrency(totals.grandTotal)} MXN</footer>
-      </article>
+      </section>
     </div>
   );
 }
 
-function transitionLabel(status: QuoteStatus): string {
-  return {
-    draft: 'Borrador',
-    issued: 'Emitida',
-    sent: 'Enviada',
-    accepted: 'Aceptada',
-    rejected: 'Rechazada',
-    cancelled: 'Cancelada',
-    expired: 'Expirada',
-  }[status];
+export function chunkQuoteItems(items: QuoteItem[], pageSize: number) {
+  if (items.length === 0) return [[]];
+  return Array.from({length: Math.ceil(items.length / pageSize)}, (_, index) =>
+    items.slice(index * pageSize, (index + 1) * pageSize),
+  );
 }
 
 function transitionActionLabel(status: QuoteStatus): string {
@@ -709,5 +892,5 @@ function transitionActionLabel(status: QuoteStatus): string {
     rejected: 'Marcar rechazada',
     cancelled: 'Cancelar',
   };
-  return labels[status] ?? transitionLabel(status);
+  return labels[status] ?? quoteStatusLabel(status);
 }

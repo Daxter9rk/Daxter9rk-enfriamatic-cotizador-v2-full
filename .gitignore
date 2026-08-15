@@ -67,6 +67,7 @@ node_modules/
 .env.local
 .env.*.local
 !.env.example
+scripts/dev-review-users/.review-users.local.json
 
 # dataconnect generated files
 .dataconnect

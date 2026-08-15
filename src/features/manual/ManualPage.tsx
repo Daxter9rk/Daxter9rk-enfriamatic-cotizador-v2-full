@@ -7,6 +7,7 @@ export function ManualPage() {
   const {profile} = useAuth();
   const [search, setSearch] = useState('');
   const sections = profile?.role === 'admin' ? administratorManual : operatorManual;
+  const roleLabel = profile?.role === 'admin' ? 'administrador' : 'operador';
   const visible = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('es-MX');
     if (!term) return sections;
@@ -21,9 +22,12 @@ export function ManualPage() {
     <>
       <PageHeader
         eyebrow="Ayuda operativa"
-        title={`Manual de ${profile?.role === 'admin' ? 'administrador' : 'operador'}`}
+        title={`Manual de ${roleLabel}`}
         description="Procedimientos completos, restricciones y recuperación para operar con seguridad."
       />
+      <p className="manual-version">
+        <strong>Enfriamatic Cotizador V2.1</strong> · Manual vigente para entorno DEV
+      </p>
       <label className="search-field manual-search">
         Buscar en el manual
         <input
@@ -33,9 +37,22 @@ export function ManualPage() {
           placeholder="Ej. PDF, corrección, catálogo…"
         />
       </label>
+      {!search && (
+        <nav className="manual-index" aria-label="Índice del manual">
+          {sections.map((section, index) => (
+            <a key={section.title} href={`#manual-${index + 1}`}>
+              {index + 1}. {section.title}
+            </a>
+          ))}
+        </nav>
+      )}
       <section className="manual-grid" aria-label={`${visible.length} temas del manual`}>
         {visible.map((section, index) => (
-          <details key={section.title} open={index === 0 && !search}>
+          <details
+            id={`manual-${sections.indexOf(section) + 1}`}
+            key={section.title}
+            open={index === 0 && !search}
+          >
             <summary>
               <span>{String(index + 1).padStart(2, '0')}</span>
               <strong>{section.title}</strong>

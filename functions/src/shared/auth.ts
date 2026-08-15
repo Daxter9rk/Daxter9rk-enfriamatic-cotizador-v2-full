@@ -7,6 +7,7 @@ export interface ActiveActor {
   email: string;
   displayName: string;
   role: UserRole;
+  isPrimaryAdmin: boolean;
 }
 
 export async function requireActiveActor(
@@ -15,20 +16,26 @@ export async function requireActiveActor(
 ): Promise<ActiveActor> {
   const uid = request.auth?.uid;
   if (!uid) {
-    throw new HttpsError('unauthenticated', 'Authentication is required.');
+    throw new HttpsError('unauthenticated', 'Authentication is required.', {
+      reason: 'unauthenticated',
+    });
   }
 
   const profile = await firestore.doc(`users/${uid}`).get();
   if (!profile.exists) {
-    throw new HttpsError('permission-denied', 'A valid user profile is required.');
+    throw new HttpsError('permission-denied', 'A valid user profile is required.', {
+      reason: 'missing-profile',
+    });
   }
 
   const data = profile.data() ?? {};
   if (data.status !== 'active') {
-    throw new HttpsError('permission-denied', 'The user profile is not active.');
+    throw new HttpsError('permission-denied', 'The user profile is not active.', {
+      reason: 'inactive',
+    });
   }
   if ((data.role !== 'admin' && data.role !== 'operator') || !roles.includes(data.role)) {
-    throw new HttpsError('permission-denied', 'The role is not authorized.');
+    throw new HttpsError('permission-denied', 'The role is not authorized.', {reason: 'role'});
   }
 
   return {
@@ -36,5 +43,20 @@ export async function requireActiveActor(
     email: String(data.email ?? request.auth?.token.email ?? ''),
     displayName: String(data.displayName ?? ''),
     role: data.role,
+    isPrimaryAdmin: data.isPrimaryAdmin === true,
   };
+}
+
+export function requireRecentAuthentication(
+  request: CallableRequest<unknown>,
+  maximumAge = 300,
+): void {
+  const authenticationTime = request.auth?.token.auth_time;
+  if (typeof authenticationTime !== 'number') {
+    throw new HttpsError('unauthenticated', 'Recent authentication is required.');
+  }
+  const age = Math.floor(Date.now() / 1000) - authenticationTime;
+  if (age < 0 || age > maximumAge) {
+    throw new HttpsError('unauthenticated', 'Recent authentication is required.');
+  }
 }

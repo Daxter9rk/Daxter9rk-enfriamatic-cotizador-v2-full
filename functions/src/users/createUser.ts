@@ -3,7 +3,7 @@ import {HttpsError, onCall} from 'firebase-functions/v2/https';
 import {logger} from 'firebase-functions';
 import {writeAudit} from '../audit/writeAudit';
 import {adminAuth, firestore} from '../shared/admin';
-import {requireActiveActor} from '../shared/auth';
+import {requireActiveActor, requireRecentAuthentication} from '../shared/auth';
 import {invalidArgument} from '../shared/errors';
 import {createUserSchema} from '../shared/schemas';
 
@@ -19,6 +19,15 @@ export const createUser = onCall(
     if (!parsed.success) throw invalidArgument(parsed.error);
 
     const input = parsed.data;
+    if (input.role === 'admin') {
+      if (!actor.isPrimaryAdmin) {
+        throw new HttpsError(
+          'permission-denied',
+          'Only the primary administrator can create an administrator.',
+        );
+      }
+      requireRecentAuthentication(request);
+    }
     let createdUid: string | null = null;
     try {
       const user = await adminAuth.createUser({
@@ -40,6 +49,8 @@ export const createUser = onCall(
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: actor.uid,
         lastLoginAt: null,
+        lastActivityAt: null,
+        isPrimaryAdmin: false,
         schemaVersion: 1,
       });
 

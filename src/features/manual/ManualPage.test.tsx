@@ -13,7 +13,7 @@ describe('ManualPage', () => {
     render(<ManualPage />);
     expect(screen.getByRole('heading', {name: /manual de administrador/i})).toBeInTheDocument();
     expect(screen.getByText('Catálogo comercial')).toBeInTheDocument();
-    expect(screen.getByText('Seguimiento comercial')).toBeInTheDocument();
+    expect(screen.getByText('Configuración')).toBeInTheDocument();
   });
   it('cambia al contenido y restricciones del operador', () => {
     auth.profile.role = 'operator';

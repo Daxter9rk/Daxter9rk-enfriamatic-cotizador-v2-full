@@ -1,0 +1,37 @@
+import {describe, expect, it} from 'vitest';
+import {
+  auditActionFilterLabel,
+  auditActionLabel,
+  auditResourceLabel,
+  auditRoleLabel,
+  visibleAuditIdentity,
+} from './auditPresentation';
+
+describe('presentación de auditoría', () => {
+  it('traduce eventos conocidos y ofrece un fallback seguro', () => {
+    expect(auditActionLabel('auth.login')).toBe('inició sesión');
+    expect(auditActionLabel('quote.issued')).toBe('emitió la cotización');
+    expect(auditActionLabel('equipment.intervention_created')).toBe('registró una intervención');
+    expect(auditActionLabel('unknown.internal_code')).toBe('realizó una acción operativa');
+    expect(auditActionFilterLabel('quote.sent')).toBe('Cotización enviada');
+    expect(auditResourceLabel('equipmentInterventions')).toBe('Intervención');
+  });
+
+  it('muestra nombre y rol sin usar el UID como identidad operativa', () => {
+    expect(
+      visibleAuditIdentity({
+        actorId: 'uid-secreto',
+        actorDisplayNameSnapshot: 'Administrador DEV',
+        actorRoleSnapshot: 'admin',
+      }),
+    ).toEqual({name: 'Administrador DEV', role: 'Administrador'});
+    expect(auditRoleLabel('operator')).toBe('Operador');
+  });
+
+  it('traduce las operaciones de imágenes del catálogo comercial', () => {
+    expect(auditActionLabel('catalog.image_added')).toBe('agregó una imagen al artículo');
+    expect(auditActionLabel('catalog.image_changed')).toBe('cambió la imagen del artículo');
+    expect(auditActionLabel('catalog.image_deleted')).toBe('eliminó la imagen del artículo');
+    expect(auditResourceLabel('catalog')).toBe('Artículo comercial');
+  });
+});

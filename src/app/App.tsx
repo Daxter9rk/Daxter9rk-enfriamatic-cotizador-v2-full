@@ -18,28 +18,27 @@ const MasterDataPage = lazy(() =>
     default: module.MasterDataPage,
   })),
 );
-const RequestsPage = lazy(() =>
-  import('../features/requests/RequestsPage').then((module) => ({default: module.RequestsPage})),
+const ClientDetailPage = lazy(() =>
+  import('../features/master-data/EntityDetailPages').then((module) => ({
+    default: module.ClientDetailPage,
+  })),
 );
 const QuotesPage = lazy(() =>
   import('../features/quotes/QuotesPage').then((module) => ({default: module.QuotesPage})),
-);
-const CatalogsPage = lazy(() =>
-  import('../features/catalogs/CatalogsPage').then((module) => ({default: module.CatalogsPage})),
 );
 const CommercialCatalogPage = lazy(() =>
   import('../features/commercial-catalog/CommercialCatalogPage').then((module) => ({
     default: module.CommercialCatalogPage,
   })),
 );
-const ActivityPage = lazy(() =>
-  import('../features/activity/ActivityPage').then((module) => ({default: module.ActivityPage})),
-);
 const SettingsPage = lazy(() =>
   import('../features/settings/SettingsPage').then((module) => ({default: module.SettingsPage})),
 );
 const ManualPage = lazy(() =>
   import('../features/manual/ManualPage').then((module) => ({default: module.ManualPage})),
+);
+const SupportPage = lazy(() =>
+  import('../features/support/SupportPage').then((module) => ({default: module.SupportPage})),
 );
 
 export function App() {
@@ -70,26 +69,42 @@ export function App() {
       <AppShell>
         <Switch>
           <Route path="/" component={DashboardPage} />
+          <Route path="/clients/:clientId">
+            {(params) => <ClientDetailPage clientId={params.clientId} />}
+          </Route>
           <Route path="/clients">
             <MasterDataPage kind="clients" />
           </Route>
+          <Route path="/sites/:siteId">
+            <Redirect to="/quotes" replace />
+          </Route>
           <Route path="/sites">
-            <MasterDataPage kind="sites" />
+            <Redirect to="/quotes" replace />
+          </Route>
+          <Route path="/equipment/:equipmentId">
+            <Redirect to="/quotes" replace />
           </Route>
           <Route path="/equipment">
-            <MasterDataPage kind="equipment" />
+            <Redirect to="/quotes" replace />
           </Route>
-          <Route path="/requests/:requestId" component={RequestsPage} />
-          <Route path="/requests" component={RequestsPage} />
+          <Route path="/requests/:requestId">
+            <Redirect to="/quotes" replace />
+          </Route>
+          <Route path="/requests">
+            <Redirect to="/quotes" replace />
+          </Route>
           <Route path="/quotes" component={QuotesPage} />
           <Route path="/commercial-catalog" component={CommercialCatalogPage} />
-          <Route path="/activity" component={ActivityPage} />
+          <Route path="/activity">
+            <Redirect to="/quotes" replace />
+          </Route>
           <Route path="/manual" component={ManualPage} />
+          <Route path="/support" component={SupportPage} />
           <Route path="/users">
             {profile?.role === 'admin' ? <UsersPage /> : <Redirect to="/" replace />}
           </Route>
           <Route path="/catalogs">
-            {profile?.role === 'admin' ? <CatalogsPage /> : <Redirect to="/" replace />}
+            <Redirect to={profile?.role === 'admin' ? '/settings' : '/'} replace />
           </Route>
           <Route path="/settings">
             {profile?.role === 'admin' ? <SettingsPage /> : <Redirect to="/" replace />}

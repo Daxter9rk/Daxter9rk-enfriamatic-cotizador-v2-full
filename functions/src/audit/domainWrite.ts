@@ -2,11 +2,15 @@ import {FieldValue} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
 import {onDocumentWritten} from 'firebase-functions/v2/firestore';
 import {firestore} from '../shared/admin';
+import {buildDomainAuditRecord, domainAuditId} from './domainEvent';
 
 const AUDITED_COLLECTIONS = new Set([
   'clients',
   'sites',
   'equipment',
+  'siteFiles',
+  'equipmentFiles',
+  'supportRequests',
   'requests',
   'quotes',
   'catalogs',
@@ -24,6 +28,11 @@ const SAFE_FIELDS = [
   'documentStatus',
   'locked',
   'grandTotal',
+  'interventionType',
+  'resultingStatus',
+  'subject',
+  'finalNote',
+  'reopenReason',
   'updatedBy',
 ];
 
@@ -63,22 +72,43 @@ export const auditDomainWrite = onDocumentWritten(
       : !after
         ? `${collectionId}.deleted`
         : `${collectionId}.updated`;
-    await firestore.collection('auditLogs').add({
-      actorId,
-      actorRole,
-      action,
-      resourceType: collectionId,
-      resourceId: event.params.documentId,
-      requestId: after?.requestId ?? before?.requestId ?? null,
-      quoteId:
-        collectionId === 'quotes'
-          ? event.params.documentId
-          : (after?.quoteId ?? before?.quoteId ?? null),
-      before: summary(before),
-      after: summary(after),
-      metadata: {source: 'firestore-trigger'},
-      createdAt: FieldValue.serverTimestamp(),
-    });
+    // Commercial transitions emit a richer event in their callable transaction.
+    if (collectionId === 'quotes' && before && after && before.status !== after.status) return;
+    const sourceEventId = event.id;
+    const resourceData = after ?? before ?? {};
+    const resourceLabel = String(
+      resourceData.folio ?? resourceData.name ?? resourceData.title ?? event.params.documentId,
+    );
+    await firestore
+      .collection('auditLogs')
+      .doc(domainAuditId(sourceEventId, action))
+      .set(
+        buildDomainAuditRecord({
+          sourceEventId,
+          eventCode: action,
+          actorUid: actorId,
+          actorDisplayNameSnapshot: String(
+            actorSnapshot.data()?.displayName ??
+              actorSnapshot.data()?.email ??
+              'Usuario autorizado',
+          ),
+          actorRoleSnapshot: actorRole,
+          resourceType: collectionId,
+          resourceId: event.params.documentId,
+          resourceLabelSnapshot: resourceLabel,
+          requestId: typeof resourceData.requestId === 'string' ? resourceData.requestId : null,
+          quoteId:
+            collectionId === 'quotes'
+              ? event.params.documentId
+              : typeof resourceData.quoteId === 'string'
+                ? resourceData.quoteId
+                : null,
+          result: 'success',
+          before: summary(before),
+          after: summary(after),
+          route: resourceRoute(collectionId, event.params.documentId),
+        }),
+      );
 
     if (
       collectionId === 'requests' &&
@@ -116,3 +146,12 @@ export const auditDomainWrite = onDocumentWritten(
     }
   },
 );
+
+function resourceRoute(collectionId: string, documentId: string): string | null {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(documentId)) return null;
+  if (collectionId === 'quotes') return `/quotes?quote=${encodeURIComponent(documentId)}`;
+  if (['requests', 'clients', 'sites', 'equipment'].includes(collectionId)) {
+    return `/${collectionId}/${encodeURIComponent(documentId)}`;
+  }
+  return null;
+}

@@ -28,6 +28,14 @@ test('operator cannot access user administration', async ({page}) => {
   await expect(page.getByRole('heading', {name: /buen día/i})).toBeVisible();
 });
 
+test('legacy internal catalogs route does not expose the technical CRUD', async ({page}) => {
+  await submitLogin(page, 'admin@enfriamatic.local');
+  await page.goto('/catalogs', {waitUntil: 'domcontentloaded'});
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page.getByRole('heading', {name: 'Configuración'})).toBeVisible();
+  await expect(page.getByRole('heading', {name: 'Catálogos internos'})).toHaveCount(0);
+});
+
 test('inactive account receives a specific block and can sign out', async ({page}) => {
   await submitLogin(page, 'inactivo@enfriamatic.local');
   await expect(page.getByRole('heading', {name: 'Cuenta inactiva'})).toBeVisible();
@@ -47,15 +55,15 @@ test('unsupported reader role is blocked', async ({page}) => {
 
 test('logout and browser back do not restore private content', async ({page}) => {
   await submitLogin(page, 'admin@enfriamatic.local');
-  await expect(page.getByText(/centro de operación/i)).toBeVisible();
+  await expect(page.getByText(/centro comercial/i)).toBeVisible();
   await logout(page);
   await page.goBack();
-  await expect(page.getByText(/centro de operación/i)).toHaveCount(0);
+  await expect(page.getByText(/centro comercial/i)).toHaveCount(0);
 });
 
 test('unknown authenticated route renders a safe 404', async ({page}) => {
   await submitLogin(page, 'admin@enfriamatic.local');
-  await expect(page.getByText(/centro de operación/i)).toBeVisible();
+  await expect(page.getByText(/centro comercial/i)).toBeVisible();
   await page.goto('/ruta-inexistente', {waitUntil: 'domcontentloaded'});
   await expect(page.getByRole('heading', {name: 'Ruta no encontrada'})).toBeVisible();
 });

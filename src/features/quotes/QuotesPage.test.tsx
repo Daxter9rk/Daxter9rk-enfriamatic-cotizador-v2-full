@@ -7,21 +7,36 @@ vi.mock('../../app/providers/AuthProvider', () => ({
   useAuth: () => ({profile: {uid: 'admin', role: 'admin'}}),
 }));
 vi.mock('../../hooks/useCollection', () => ({
-  useCollection: () => ({data: [], loading: false, error: null, reload: vi.fn()}),
+  useCollection: (collection: string) => ({
+    data:
+      collection === 'clients' ? [{id: 'client-1', name: 'Cliente demo', status: 'active'}] : [],
+    loading: false,
+    error: null,
+    reload: vi.fn(),
+  }),
+}));
+vi.mock('../../hooks/usePaginatedCollection', () => ({
+  usePaginatedCollection: (collection: string) => ({
+    data: collection === 'quotes' ? [] : [],
+    loading: false,
+    error: null,
+    reload: vi.fn(),
+    hasMore: false,
+    page: 1,
+    nextPage: vi.fn(),
+    previousPage: vi.fn(),
+  }),
 }));
 
-describe('QuotesPage guided creation', () => {
-  it('explica requisitos y bloquea cotizaciones libres', async () => {
+describe('QuotesPage independent creation', () => {
+  it('creates only independent drafts while keeping client required', async () => {
     const user = userEvent.setup();
     render(<QuotesPage />);
     await user.click(screen.getByRole('button', {name: 'Nueva cotización'}));
-    expect(screen.getByText('Cliente')).toBeVisible();
-    expect(screen.getByText('Instalación')).toBeVisible();
-    expect(screen.getByText(/aún no puedes crear/i)).toBeVisible();
-    expect(screen.getByRole('button', {name: 'Crear cotización'})).toBeDisabled();
-    expect(screen.getByRole('link', {name: 'Gestionar solicitudes'})).toHaveAttribute(
-      'href',
-      '/requests',
-    );
+    expect(screen.getByTestId('quote-client')).toBeRequired();
+    expect(screen.queryByTestId('quote-request')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', {name: /Instalaci/})).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', {name: /Equipo/})).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Referencia de servicio/)).toBeVisible();
   });
 });

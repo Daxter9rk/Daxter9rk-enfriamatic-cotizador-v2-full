@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import type {QuoteDocumentModel} from './quoteDocumentModel';
 
 interface PdfItem {
   quantity: number;
@@ -17,8 +18,11 @@ export interface QuotePdfInput {
   clientName: string;
   clientLegalName?: string;
   clientRfc?: string;
-  siteName: string;
-  siteAddress: string;
+  siteName?: string;
+  siteAddress?: string;
+  serviceReference?: string;
+  technicalContext?: string;
+  operationalMode?: 'historical' | 'independent';
   equipmentName?: string;
   items: PdfItem[];
   discountDisplayMode: 'detailed' | 'summary' | 'incorporated';
@@ -50,13 +54,33 @@ const money = (value: number): string =>
     currency: 'MXN',
   }).format(value);
 
-function ensureSpace(document: PDFKit.PDFDocument, needed: number): void {
+function ensureSpace(document: PDFKit.PDFDocument, needed: number): boolean {
   if (document.y + needed > document.page.height - 90) {
     document.addPage();
+    return true;
   }
+  return false;
 }
 
-export async function generateQuotePdf(input: QuotePdfInput): Promise<GeneratedPdf> {
+function drawTableHeader(document: PDFKit.PDFDocument, y: number): void {
+  document.y = y;
+  document
+    .fillColor('#02557B')
+    .fontSize(8)
+    .text('CANT.', 44, y, {width: 42})
+    .text('UNIDAD', 88, y, {width: 50})
+    .text('DESCRIPCIÓN', 142, y, {width: 245})
+    .text('P. UNITARIO', 390, y, {width: 82, align: 'right'})
+    .text('IMPORTE', 476, y, {width: 92, align: 'right'});
+  document.y = y + 15;
+  document.moveTo(44, document.y).lineTo(568, document.y).stroke('#02557B');
+  document.y += 9;
+}
+
+export async function generateQuotePdf(
+  source: QuotePdfInput | QuoteDocumentModel,
+): Promise<GeneratedPdf> {
+  const input = toPdfInput(source);
   const document = new PDFDocument({
     size: 'LETTER',
     margins: {top: 44, right: 44, bottom: 52, left: 44},
@@ -109,61 +133,85 @@ export async function generateQuotePdf(input: QuotePdfInput): Promise<GeneratedP
     .text('INSTALACIÓN / EQUIPO', 310, 132)
     .fillColor('#17242B')
     .fontSize(10)
-    .text(input.siteName, 310, 146)
+    .text(input.siteName || input.equipmentName || input.serviceReference || '', 310, 146)
     .fontSize(8)
     .fillColor('#647680')
     .text([input.siteAddress, input.equipmentName].filter(Boolean).join(' · '), 310, 163, {
       width: 240,
     });
 
-  document.y = 220;
-  document
-    .fillColor('#02557B')
-    .fontSize(8)
-    .text('CANT.', 44, document.y, {width: 42})
-    .text('UNIDAD', 88, document.y, {width: 50})
-    .text('DESCRIPCIÓN', 142, document.y, {width: 245})
-    .text('P. UNITARIO', 390, document.y, {width: 82, align: 'right'})
-    .text('IMPORTE', 476, document.y, {width: 92, align: 'right'});
-  document.moveDown(0.6);
-  document.moveTo(44, document.y).lineTo(568, document.y).stroke('#02557B');
-  document.moveDown(0.6);
+  if (input.operationalMode === 'independent') {
+    document
+      .fillColor('#F4F7F9')
+      .rect(300, 125, 260, 55)
+      .fill()
+      .fillColor('#02557B')
+      .fontSize(8)
+      .text('CONTEXTO OPERATIVO', 310, 132)
+      .fillColor('#17242B')
+      .fontSize(9)
+      .text(input.serviceReference || '', 310, 146)
+      .fillColor('#647680')
+      .fontSize(8)
+      .text(input.technicalContext || '', 310, 160, {width: 240});
+  }
+
+  drawTableHeader(document, 220);
+  let tableY = document.y;
 
   for (const item of input.items) {
-    ensureSpace(document, 58);
-    const startY = document.y;
     const descriptor = [item.description, [item.brand, item.model].filter(Boolean).join(' ')]
       .filter(Boolean)
       .join('\n');
+    document.fontSize(8.5);
+    const descriptorHeight = document.heightOfString(descriptor, {width: 245});
+    const discountHeight =
+      input.discountDisplayMode === 'detailed' && item.discountAmount > 0 ? 13 : 0;
+    const rowHeight = Math.max(40, descriptorHeight + discountHeight + 20);
+    if (tableY + rowHeight + 30 > document.page.height - 90) {
+      document.addPage();
+      document
+        .fillColor('#647680')
+        .fontSize(8)
+        .text(`Cotización ${input.folio} · Continuación`, 44, 44, {width: 524});
+      drawTableHeader(document, 66);
+      tableY = document.y;
+    }
+    const startY = tableY;
     document
       .fillColor('#17242B')
       .fontSize(8.5)
-      .text(String(item.quantity), 44, startY, {width: 42})
-      .text(item.unit, 88, startY, {width: 50})
-      .text(descriptor, 142, startY, {width: 245})
-      .text(
-        money(
-          input.discountDisplayMode === 'incorporated'
-            ? item.lineSubtotal / item.quantity
-            : item.originalUnitPrice,
-        ),
-        390,
-        startY,
-        {width: 82, align: 'right'},
-      )
-      .text(money(item.lineSubtotal), 476, startY, {
-        width: 92,
-        align: 'right',
-      });
+      .text(String(item.quantity), 44, startY, {width: 42, height: rowHeight});
+    document.text(item.unit, 88, startY, {width: 50, height: rowHeight});
+    document.text(descriptor, 142, startY, {width: 245, height: descriptorHeight + 2});
+    document.text(
+      money(
+        input.discountDisplayMode === 'incorporated'
+          ? item.lineSubtotal / item.quantity
+          : item.originalUnitPrice,
+      ),
+      390,
+      startY,
+      {width: 82, height: rowHeight, align: 'right'},
+    );
+    document.text(money(item.lineSubtotal), 476, startY, {
+      width: 92,
+      height: rowHeight,
+      align: 'right',
+    });
     if (input.discountDisplayMode === 'detailed' && item.discountAmount > 0) {
       document
         .fillColor('#CB171D')
         .fontSize(7.5)
-        .text(`Descuento: -${money(item.discountAmount)}`, 142, document.y + 2);
+        .text(`Descuento: -${money(item.discountAmount)}`, 142, startY + descriptorHeight + 2, {
+          width: 245,
+        });
     }
-    document.y = Math.max(document.y + 8, startY + 34);
+    tableY = startY + rowHeight;
+    document.y = tableY;
     document.moveTo(44, document.y).lineTo(568, document.y).stroke('#E7EDF0');
-    document.moveDown(0.5);
+    tableY += 6;
+    document.y = tableY;
   }
 
   ensureSpace(document, 150);
@@ -257,4 +305,40 @@ export async function generateQuotePdf(input: QuotePdfInput): Promise<GeneratedP
   });
   document.end();
   return {bytes: await completion, pageCount: range.count};
+}
+
+function toPdfInput(source: QuotePdfInput | QuoteDocumentModel): QuotePdfInput {
+  if ('identity' in source) {
+    const context = source.operationalContext;
+    return {
+      folio: source.identity.folio,
+      issuedAt: source.identity.issuedAt,
+      clientName: source.client.name,
+      clientLegalName: source.client.legalName ?? undefined,
+      clientRfc: source.client.rfc ?? undefined,
+      siteName: context.siteName ?? undefined,
+      siteAddress: context.siteAddress ?? undefined,
+      equipmentName: context.equipmentName ?? undefined,
+      serviceReference: context.serviceReference ?? undefined,
+      technicalContext: context.technicalContext ?? undefined,
+      operationalMode: source.mode,
+      items: source.items.map((item) => ({
+        ...item,
+        brand: item.brand ?? undefined,
+        model: item.model ?? undefined,
+      })),
+      discountDisplayMode: source.terms.discountDisplayMode,
+      ...source.totals,
+      taxRate: source.terms.taxRate,
+      currency: source.identity.currency,
+      validityDays: source.identity.validityDays,
+      notes: source.terms.notes ?? undefined,
+      paymentMethod: source.company.paymentMethod ?? undefined,
+      warranty: source.company.warranty ?? undefined,
+      exclusions: source.company.exclusions ?? undefined,
+      legalText: source.company.legalText ?? undefined,
+      watermark: source.company.watermark,
+    };
+  }
+  return source;
 }

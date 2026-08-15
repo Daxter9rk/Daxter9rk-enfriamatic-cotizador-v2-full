@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  documentId,
   deleteDoc,
   doc,
   getDoc,
@@ -9,9 +10,11 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  startAfter,
   setDoc,
   updateDoc,
   where,
+  writeBatch,
   type DocumentData,
   type QueryConstraint,
 } from 'firebase/firestore';
@@ -27,7 +30,11 @@ export type DomainCollection =
   | 'catalogs'
   | 'catalogItems'
   | 'settings'
-  | 'notifications';
+  | 'notifications'
+  | 'supportRequests'
+  | 'siteFiles'
+  | 'equipmentFiles'
+  | 'equipmentInterventions';
 
 export async function listDocuments<T>(
   collectionName: DomainCollection | 'users' | 'notifications' | 'auditLogs' | 'documents',
@@ -37,6 +44,94 @@ export async function listDocuments<T>(
   const ref = collection(db, collectionName);
   const snapshot = await getDocs(query(ref, ...constraints, limit(pageSize)));
   return snapshot.docs.map((item) => ({id: item.id, ...item.data()}) as T & {id: string});
+}
+
+export interface CollectionCursor {
+  values: unknown[];
+}
+
+export interface CollectionPage<T> {
+  data: Array<T & {id: string}>;
+  cursor: CollectionCursor | null;
+  hasMore: boolean;
+}
+
+export interface CollectionOrder {
+  field: string;
+  direction: 'asc' | 'desc';
+}
+
+/** Bounded, cursor-based list query with an explicit deterministic tie-break. */
+export async function listDocumentsPage<T>(
+  collectionName: DomainCollection | 'users' | 'documents',
+  constraints: QueryConstraint[] = [],
+  order: CollectionOrder[],
+  pageSize = 25,
+  cursor?: CollectionCursor | null,
+): Promise<CollectionPage<T>> {
+  const ref = collection(db, collectionName);
+  const orderConstraints = order.map((item) =>
+    item.field === '__name__'
+      ? orderBy(documentId(), item.direction)
+      : orderBy(item.field, item.direction),
+  );
+  const cursorConstraint = cursor ? [startAfter(...cursor.values)] : [];
+  const snapshot = await getDocs(
+    query(ref, ...constraints, ...orderConstraints, ...cursorConstraint, limit(pageSize)),
+  );
+  const data = snapshot.docs.map((item) => ({id: item.id, ...item.data()}) as T & {id: string});
+  const last = snapshot.docs.at(-1);
+  const lastData = last?.data() as Record<string, unknown> | undefined;
+  return {
+    data,
+    cursor:
+      last && lastData
+        ? {
+            values: order.map((item) =>
+              item.field === '__name__' ? last.id : lastData[item.field],
+            ),
+          }
+        : null,
+    hasMore: snapshot.size === pageSize,
+  };
+}
+
+export interface AuditLogCursor {
+  createdAt: unknown;
+  id: string;
+}
+
+export interface AuditLogPage<T> {
+  data: Array<T & {id: string}>;
+  cursor: AuditLogCursor | null;
+  hasMore: boolean;
+}
+
+export async function listAuditLogs<T>(
+  constraints: QueryConstraint[] = [],
+  pageSize = 50,
+  cursor?: AuditLogCursor | null,
+): Promise<AuditLogPage<T>> {
+  const ref = collection(db, 'auditLogs');
+  const cursorConstraint = cursor ? [startAfter(cursor.createdAt, cursor.id)] : [];
+  const snapshot = await getDocs(
+    query(
+      ref,
+      ...constraints,
+      orderBy('createdAt', 'desc'),
+      orderBy(documentId(), 'desc'),
+      ...cursorConstraint,
+      limit(pageSize),
+    ),
+  );
+  const data = snapshot.docs.map((item) => ({id: item.id, ...item.data()}) as T & {id: string});
+  const last = snapshot.docs.at(-1);
+  const lastData = last ? (last.data() as {createdAt: AuditLogCursor['createdAt']}) : null;
+  return {
+    data,
+    cursor: last && lastData ? {createdAt: lastData.createdAt, id: last.id} : null,
+    hasMore: snapshot.size === pageSize,
+  };
 }
 
 export async function getDocument<T>(collectionName: string, id: string): Promise<T | null> {
@@ -73,6 +168,38 @@ export async function updateDocument(
   });
 }
 
+export async function deleteDocument(collectionName: DomainCollection, id: string): Promise<void> {
+  await deleteDoc(doc(db, collectionName, id));
+}
+
+export function reserveDocumentId(collectionName: DomainCollection): string {
+  return doc(collection(db, collectionName)).id;
+}
+
+export async function setKnownDocumentsAtomically(
+  writes: Array<{collectionName: DomainCollection; id: string; data: DocumentData}>,
+  actorId: string,
+): Promise<void> {
+  const references = writes.map((write) => doc(db, write.collectionName, write.id));
+  const existing = await Promise.all(references.map((reference) => getDoc(reference)));
+  const batch = writeBatch(db);
+  writes.forEach((write, index) => {
+    batch.set(
+      references[index]!,
+      {
+        ...write.data,
+        ...(existing[index]!.exists()
+          ? {}
+          : {createdAt: serverTimestamp(), createdBy: actorId, schemaVersion: 1}),
+        updatedAt: serverTimestamp(),
+        updatedBy: actorId,
+      },
+      {merge: true},
+    );
+  });
+  await batch.commit();
+}
+
 export async function markNotificationRead(notificationId: string): Promise<void> {
   await updateDoc(doc(db, 'notifications', notificationId), {
     read: true,
@@ -100,6 +227,22 @@ export async function setKnownDocument(
     },
     {merge: true},
   );
+}
+
+export async function createKnownDocument(
+  collectionName: DomainCollection,
+  id: string,
+  data: DocumentData,
+  actorId: string,
+): Promise<void> {
+  await setDoc(doc(db, collectionName, id), {
+    ...data,
+    createdAt: serverTimestamp(),
+    createdBy: actorId,
+    updatedAt: serverTimestamp(),
+    updatedBy: actorId,
+    schemaVersion: 1,
+  });
 }
 
 export async function saveQuoteItem(
@@ -135,13 +278,19 @@ export async function deleteQuoteItem(quoteId: string, itemId: string): Promise<
 
 export const constraints = {
   newest: () => orderBy('createdAt', 'desc'),
+  newestUpdated: () => orderBy('updatedAt', 'desc'),
   byClient: (clientId: string) => where('clientId', '==', clientId),
   bySite: (siteId: string) => where('siteId', '==', siteId),
+  byEquipment: (equipmentId: string) => where('equipmentId', '==', equipmentId),
   assignedTo: (uid: string) => where('assignedTo', '==', uid),
   authorizedFor: (uid: string) => where('operatorIds', 'array-contains', uid),
   notificationsFor: (uid: string) => where('userId', '==', uid),
   auditFor: (uid: string) => where('actorId', '==', uid),
   activeOnly: () => where('status', '==', 'active'),
+  status: (value: string) => where('status', '==', value),
+  documentStatus: (value: string) => where('documentStatus', '==', value),
+  unassigned: () => where('assignedTo', '==', null),
+  createdBy: (uid: string) => where('createdBy', '==', uid),
 };
 
 export async function callFunction<TInput, TOutput>(name: string, data: TInput): Promise<TOutput> {

@@ -2,7 +2,6 @@ import {readFile} from 'node:fs/promises';
 import {expect, test, type Page} from '@playwright/test';
 
 const admin = {email: 'admin@enfriamatic.local', password: 'DevOnly!Enfriamatic2026'};
-const operator = {email: 'operador@enfriamatic.local', password: 'DevOnly!Enfriamatic2026'};
 
 async function login(page: Page, credentials = admin) {
   await page.goto('/', {waitUntil: 'domcontentloaded'});
@@ -10,7 +9,7 @@ async function login(page: Page, credentials = admin) {
   await page.getByTestId('login-email').fill(credentials.email);
   await page.getByTestId('login-password').fill(credentials.password);
   await page.getByTestId('login-submit').click();
-  await expect(page.getByText(/centro de operación/i)).toBeVisible();
+  await expect(page.getByText(/centro comercial/i)).toBeVisible();
 }
 
 async function logout(page: Page) {
@@ -41,13 +40,13 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
   const suffix = String(Date.now()).slice(-7);
   const productName = `Producto E2E ${suffix}`;
   const serviceName = `Servicio E2E ${suffix}`;
-  const clientName = `Cliente E2E ${suffix}`;
-  const siteName = `Planta E2E ${suffix}`;
-  const equipmentName = `Chiller E2E ${suffix}`;
-  const requestTitle = `Diagnóstico E2E ${suffix}`;
+  const clientName = 'Procesos Fríos del Bajío';
 
   await login(page);
-  await page.getByRole('link', {name: 'Catálogo comercial', exact: true}).click();
+  await page
+    .getByRole('navigation', {name: 'Operación'})
+    .getByRole('link', {name: 'Catálogo comercial', exact: true})
+    .click();
   await createCatalogItem(page, {
     code: `PROD-E2E-${suffix}`,
     type: 'product',
@@ -61,55 +60,18 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
     price: '2000',
   });
 
-  await page.getByRole('link', {name: 'Clientes', exact: true}).click();
-  await page.getByTestId('new-clients').click();
-  await page.getByTestId('clients-name').fill(clientName);
-  await page.getByRole('button', {name: 'Guardar'}).click();
-  await expect(page.getByRole('heading', {name: clientName})).toBeVisible();
-
-  await page.getByRole('link', {name: 'Instalaciones', exact: true}).click();
-  await page.getByTestId('new-sites').click();
-  await page.getByLabel('Cliente').selectOption({label: clientName});
-  await page.getByTestId('sites-name').fill(siteName);
-  await page.getByLabel('Calle').fill('Avenida Industrial');
-  await page.getByLabel('Ciudad').fill('Querétaro');
-  await page.getByRole('textbox', {name: 'Estado', exact: true}).fill('Querétaro');
-  await page.getByLabel('Código postal').fill('76000');
-  await page.getByRole('button', {name: 'Guardar'}).click();
-  await expect(page.getByRole('heading', {name: siteName})).toBeVisible();
-
-  await page.getByRole('link', {name: 'Equipos', exact: true}).click();
-  await page.getByTestId('new-equipment').click();
-  await page.getByLabel('Cliente').selectOption({label: clientName});
-  await page.getByLabel('Instalación').selectOption({label: siteName});
-  await page.getByTestId('equipment-name').fill(equipmentName);
-  await page.getByLabel('Categoría').fill('Chiller');
-  await page.getByRole('button', {name: 'Guardar'}).click();
-  await expect(page.getByRole('heading', {name: equipmentName})).toBeVisible();
-
-  await page.getByRole('link', {name: 'Solicitudes', exact: true}).click();
-  await page.getByTestId('new-request').click();
-  await page.getByLabel('Cliente').selectOption({label: clientName});
-  await page.getByLabel('Instalación').selectOption({label: siteName});
-  await page.getByLabel('Equipo').selectOption({label: equipmentName});
-  await page.getByTestId('request-title').fill(requestTitle);
-  await page.getByLabel('Descripción').fill('Validación integral con emuladores.');
-  await page.getByLabel('Asignar a').selectOption({label: 'Operador Emulador'});
-  await page.getByRole('button', {name: 'Crear solicitud'}).click();
-  await expect(page.getByText(requestTitle)).toBeVisible();
-  await logout(page);
-
-  await login(page, operator);
-  await page.getByRole('link', {name: 'Mis solicitudes', exact: true}).click();
-  await page.getByText(requestTitle).click();
-  await page.getByRole('button', {name: 'Iniciar solicitud'}).click();
-  await page.getByRole('link', {name: 'Cotizaciones', exact: true}).click();
+  await page.goto('/quotes', {waitUntil: 'domcontentloaded'});
+  await expect(page.getByRole('heading', {name: 'Cotizaciones'})).toBeVisible();
+  await page
+    .getByRole('navigation', {name: 'Operación'})
+    .getByRole('link', {name: 'Cotizaciones', exact: true})
+    .click();
   await page.getByTestId('new-quote').click();
-  await page.getByTestId('quote-request').selectOption({label: requestTitle});
+  await page.getByTestId('quote-client').selectOption({label: clientName});
   await page.getByRole('button', {name: 'Crear cotización'}).click();
 
-  await page.getByRole('button', {name: `Agregar ${productName}`}).click();
-  await page.getByRole('button', {name: `Agregar ${serviceName}`}).click();
+  await page.getByRole('button', {name: 'Agregar Compresor emulador'}).click();
+  await page.getByRole('button', {name: 'Agregar Servicio emulador'}).click();
   await page.getByRole('button', {name: 'Editar'}).first().click();
   await page.getByTestId('quote-item-description').fill(`${productName} ajustado en partida`);
   await page.getByRole('button', {name: 'Guardar cambios de partida'}).click();
@@ -149,16 +111,18 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
   await logout(page);
 
   await login(page);
-  await page.getByRole('link', {name: 'Cotizaciones', exact: true}).click();
+  await page
+    .getByRole('navigation', {name: 'Operación'})
+    .getByRole('link', {name: 'Cotizaciones', exact: true})
+    .click();
   await page.getByRole('heading', {name: issuedFolio}).click();
   await page.getByRole('button', {name: 'Marcar aceptada'}).click();
   await page.getByRole('button', {name: 'Confirmar'}).click();
   await expect(page.getByText(/estado actualizado a aceptada/i)).toBeVisible();
   await page.getByRole('button', {name: 'Crear corrección'}).click();
-  await expect(page.getByText(/corrección creada/i)).toBeVisible({timeout: 15_000});
+  await expect(page.getByRole('dialog').getByText('Borrador', {exact: true})).toBeVisible({
+    timeout: 15_000,
+  });
   await page.getByRole('dialog').getByRole('button', {name: 'Cerrar', exact: true}).click();
-  await page.getByRole('link', {name: 'Actividad', exact: true}).click();
-  await expect(page.getByText('quote.sent')).toBeVisible();
-  await expect(page.getByText('quote.accepted')).toBeVisible();
-  await expect(page.getByText('quote.correction_created')).toBeVisible();
+  await expect(page.getByRole('link', {name: 'Actividad', exact: true})).toHaveCount(0);
 });
