@@ -46,6 +46,56 @@ export async function listDocuments<T>(
   return snapshot.docs.map((item) => ({id: item.id, ...item.data()}) as T & {id: string});
 }
 
+export interface CollectionCursor {
+  values: unknown[];
+}
+
+export interface CollectionPage<T> {
+  data: Array<T & {id: string}>;
+  cursor: CollectionCursor | null;
+  hasMore: boolean;
+}
+
+export interface CollectionOrder {
+  field: string;
+  direction: 'asc' | 'desc';
+}
+
+/** Bounded, cursor-based list query with an explicit deterministic tie-break. */
+export async function listDocumentsPage<T>(
+  collectionName: DomainCollection | 'users' | 'documents',
+  constraints: QueryConstraint[] = [],
+  order: CollectionOrder[],
+  pageSize = 25,
+  cursor?: CollectionCursor | null,
+): Promise<CollectionPage<T>> {
+  const ref = collection(db, collectionName);
+  const orderConstraints = order.map((item) =>
+    item.field === '__name__'
+      ? orderBy(documentId(), item.direction)
+      : orderBy(item.field, item.direction),
+  );
+  const cursorConstraint = cursor ? [startAfter(...cursor.values)] : [];
+  const snapshot = await getDocs(
+    query(ref, ...constraints, ...orderConstraints, ...cursorConstraint, limit(pageSize)),
+  );
+  const data = snapshot.docs.map((item) => ({id: item.id, ...item.data()}) as T & {id: string});
+  const last = snapshot.docs.at(-1);
+  const lastData = last?.data() as Record<string, unknown> | undefined;
+  return {
+    data,
+    cursor:
+      last && lastData
+        ? {
+            values: order.map((item) =>
+              item.field === '__name__' ? last.id : lastData[item.field],
+            ),
+          }
+        : null,
+    hasMore: snapshot.size === pageSize,
+  };
+}
+
 export interface AuditLogCursor {
   createdAt: unknown;
   id: string;
@@ -237,6 +287,9 @@ export const constraints = {
   notificationsFor: (uid: string) => where('userId', '==', uid),
   auditFor: (uid: string) => where('actorId', '==', uid),
   activeOnly: () => where('status', '==', 'active'),
+  status: (value: string) => where('status', '==', value),
+  documentStatus: (value: string) => where('documentStatus', '==', value),
+  unassigned: () => where('assignedTo', '==', null),
   createdBy: (uid: string) => where('createdBy', '==', uid),
 };
 
