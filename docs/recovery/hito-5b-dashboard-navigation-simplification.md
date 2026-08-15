@@ -33,7 +33,12 @@ No se modificaron datos, colecciones, Functions, Firestore Rules, Storage Rules,
 
 ## Evidencia
 
-La evidencia detallada de comandos y resultados se completa en el informe de cierre de esta rama. La suite `npm run validate:emulators` debe ejecutarse dos veces consecutivas antes de publicar.
+- Frontend: formato, lint, typecheck, 27 archivos de pruebas (66 pruebas) y build: PASA.
+- Functions: lint sin errores, typecheck, 11 archivos de pruebas (36 pruebas) y build: PASA. Se mantienen cuatro warnings preexistentes de `any` en `functions/src/quotes/createCorrection.ts`.
+- Rules y Storage Emulator: 35 pruebas: PASA.
+- E2E Emulator Suite: 22 pruebas: PASA.
+- `npm run validate:emulators`: dos ejecuciones consecutivas: PASA.
+- La suite se ejecutó sólo contra el proyecto demo y sus emuladores; no hubo deploy ni acceso de escritura a Firebase real.
 
 ## Rollback
 
