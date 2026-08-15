@@ -23,19 +23,14 @@ const retiredPaths = [
 test('admin sees the reduced MVP navigation and safe guards for retired routes', async ({page}) => {
   await login(page, 'admin@enfriamatic.local');
 
-  for (const label of [
-    'Inicio',
-    'Clientes',
-    'Cotizaciones',
-    'Catálogo comercial',
-    'Configuración',
-  ]) {
+  for (const label of ['Inicio', 'Clientes', 'Cotizaciones', 'Catálogo comercial']) {
     await expect(
       page
         .getByRole('navigation', {name: 'Operación'})
         .getByRole('link', {name: label, exact: true}),
     ).toBeVisible();
   }
+  await expect(page.getByRole('link', {name: 'Configuración', exact: true})).toBeVisible();
   for (const label of ['Solicitudes', 'Instalaciones', 'Equipos', 'Actividad']) {
     await expect(page.getByRole('link', {name: label, exact: true})).toHaveCount(0);
   }
