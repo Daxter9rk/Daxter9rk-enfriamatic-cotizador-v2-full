@@ -30,7 +30,11 @@ test('admin sees the reduced MVP navigation and safe guards for retired routes',
     'Catálogo comercial',
     'Configuración',
   ]) {
-    await expect(page.getByRole('link', {name: label, exact: true})).toBeVisible();
+    await expect(
+      page
+        .getByRole('navigation', {name: 'Operación'})
+        .getByRole('link', {name: label, exact: true}),
+    ).toBeVisible();
   }
   for (const label of ['Solicitudes', 'Instalaciones', 'Equipos', 'Actividad']) {
     await expect(page.getByRole('link', {name: label, exact: true})).toHaveCount(0);
@@ -47,8 +51,16 @@ test('admin sees the reduced MVP navigation and safe guards for retired routes',
 test('operator receives the same route guard without admin links', async ({page}) => {
   await login(page, 'operador@enfriamatic.local');
   await expect(page.getByRole('link', {name: 'Usuarios y permisos'})).toHaveCount(0);
-  await expect(page.getByRole('link', {name: 'Cotizaciones', exact: true})).toBeVisible();
-  await expect(page.getByRole('link', {name: 'Catálogo comercial', exact: true})).toBeVisible();
+  await expect(
+    page
+      .getByRole('navigation', {name: 'Operación'})
+      .getByRole('link', {name: 'Cotizaciones', exact: true}),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole('navigation', {name: 'Operación'})
+      .getByRole('link', {name: 'Catálogo comercial', exact: true}),
+  ).toBeVisible();
 
   await page.goto('/requests', {waitUntil: 'domcontentloaded'});
   await expect(page).toHaveURL(/\/quotes$/);
@@ -57,7 +69,10 @@ test('operator receives the same route guard without admin links', async ({page}
 
 test('commercial catalog remains an active destination', async ({page}) => {
   await login(page, 'admin@enfriamatic.local');
-  await page.getByRole('link', {name: 'Catálogo comercial', exact: true}).click();
+  await page
+    .getByRole('navigation', {name: 'Operación'})
+    .getByRole('link', {name: 'Catálogo comercial', exact: true})
+    .click();
   await expect(page).toHaveURL(/\/commercial-catalog$/);
   await expect(
     page.getByRole('heading', {name: 'Catálogo de productos y servicios'}),

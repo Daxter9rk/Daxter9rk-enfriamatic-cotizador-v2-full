@@ -39,7 +39,7 @@ async function login(page: Page, email: string) {
   await page.getByTestId('login-email').fill(email);
   await page.getByTestId('login-password').fill(password);
   await page.getByTestId('login-submit').click();
-  await expect(page.getByText(/centro de operación/i)).toBeVisible();
+  await expect(page.getByText(/centro comercial/i)).toBeVisible();
 }
 
 async function logout(page: Page) {
@@ -253,7 +253,10 @@ test('commercial catalog UI persists a private image and keeps operator read-onl
 
   try {
     await login(page, 'admin@enfriamatic.local');
-    await page.getByRole('link', {name: 'Catálogo comercial', exact: true}).click();
+    await page
+      .getByRole('navigation', {name: 'Operación'})
+      .getByRole('link', {name: 'Catálogo comercial', exact: true})
+      .click();
     await page.getByPlaceholder('Código, nombre, marca o modelo…').fill(shortSuffix);
     let card = page.locator('article.catalog-card').filter({
       has: page.getByRole('heading', {name: itemName}),
@@ -275,7 +278,10 @@ test('commercial catalog UI persists a private image and keeps operator read-onl
     await logout(page);
 
     await login(page, 'operador@enfriamatic.local');
-    await page.getByRole('link', {name: 'Catálogo comercial', exact: true}).click();
+    await page
+      .getByRole('navigation', {name: 'Operación'})
+      .getByRole('link', {name: 'Catálogo comercial', exact: true})
+      .click();
     await page.getByPlaceholder('Código, nombre, marca o modelo…').fill(shortSuffix);
     card = page.locator('article.catalog-card').filter({
       has: page.getByRole('heading', {name: itemName}),
@@ -285,7 +291,10 @@ test('commercial catalog UI persists a private image and keeps operator read-onl
     await logout(page);
 
     await login(page, 'admin@enfriamatic.local');
-    await page.getByRole('link', {name: 'Catálogo comercial', exact: true}).click();
+    await page
+      .getByRole('navigation', {name: 'Operación'})
+      .getByRole('link', {name: 'Catálogo comercial', exact: true})
+      .click();
     await page.getByPlaceholder('Código, nombre, marca o modelo…').fill(shortSuffix);
     card = page.locator('article.catalog-card').filter({
       has: page.getByRole('heading', {name: itemName}),

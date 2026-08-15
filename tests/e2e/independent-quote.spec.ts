@@ -13,11 +13,14 @@ async function login(page: Page, user: {email: string; password: string}) {
   await page.getByTestId('login-email').fill(user.email);
   await page.getByTestId('login-password').fill(user.password);
   await page.getByTestId('login-submit').click();
-  await expect(page.getByText(/centro de operación/i)).toBeVisible();
+  await expect(page.getByText(/centro comercial/i)).toBeVisible();
 }
 
 async function openIndependentQuote(page: Page) {
-  await page.getByRole('link', {name: 'Cotizaciones', exact: true}).click();
+  await page
+    .getByRole('navigation', {name: 'Operación'})
+    .getByRole('link', {name: 'Cotizaciones', exact: true})
+    .click();
   await page.getByTestId('new-quote').click();
   await page.getByTestId('quote-client').selectOption({label: 'Procesos Fríos del Bajío'});
   await expect(page.locator('select[name="siteId"]')).toHaveCount(0);

@@ -9,7 +9,7 @@ async function login(page: Page, credentials = admin) {
   await page.getByTestId('login-email').fill(credentials.email);
   await page.getByTestId('login-password').fill(credentials.password);
   await page.getByTestId('login-submit').click();
-  await expect(page.getByText(/centro de operación/i)).toBeVisible();
+  await expect(page.getByText(/centro comercial/i)).toBeVisible();
 }
 
 async function logout(page: Page) {
@@ -44,7 +44,10 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
   const requestTitle = 'Diagnóstico del chiller';
 
   await login(page);
-  await page.getByRole('link', {name: 'Catálogo comercial', exact: true}).click();
+  await page
+    .getByRole('navigation', {name: 'Operación'})
+    .getByRole('link', {name: 'Catálogo comercial', exact: true})
+    .click();
   await createCatalogItem(page, {
     code: `PROD-E2E-${suffix}`,
     type: 'product',
@@ -60,7 +63,10 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
 
   await page.goto('/quotes', {waitUntil: 'domcontentloaded'});
   await expect(page.getByRole('heading', {name: 'Cotizaciones'})).toBeVisible();
-  await page.getByRole('link', {name: 'Cotizaciones', exact: true}).click();
+  await page
+    .getByRole('navigation', {name: 'Operación'})
+    .getByRole('link', {name: 'Cotizaciones', exact: true})
+    .click();
   await page.getByTestId('new-quote').click();
   await page.getByTestId('quote-client').selectOption({label: clientName});
   await page.getByTestId('quote-request').selectOption({label: requestTitle});
@@ -107,7 +113,10 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
   await logout(page);
 
   await login(page);
-  await page.getByRole('link', {name: 'Cotizaciones', exact: true}).click();
+  await page
+    .getByRole('navigation', {name: 'Operación'})
+    .getByRole('link', {name: 'Cotizaciones', exact: true})
+    .click();
   await page.getByRole('heading', {name: issuedFolio}).click();
   await page.getByRole('button', {name: 'Marcar aceptada'}).click();
   await page.getByRole('button', {name: 'Confirmar'}).click();

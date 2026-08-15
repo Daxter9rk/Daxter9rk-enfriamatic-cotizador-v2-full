@@ -28,8 +28,14 @@ test('admin dashboard is focused on commercial MVP actions', async ({page}) => {
   await login(page, 'admin@enfriamatic.local');
   await expect(page.getByRole('heading', {name: 'Cotizaciones recientes'})).toBeVisible();
   await expect(page.getByRole('link', {name: 'Nueva cotización'})).toBeVisible();
-  await expect(page.getByRole('link', {name: 'Clientes'})).toBeVisible();
-  await expect(page.getByRole('link', {name: 'Catálogo comercial'})).toBeVisible();
+  await expect(
+    page.getByRole('region', {name: 'Acciones rápidas'}).getByRole('link', {name: 'Clientes'}),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole('region', {name: 'Acciones rápidas'})
+      .getByRole('link', {name: 'Catálogo comercial'}),
+  ).toBeVisible();
   await expectNoRetiredDashboardLinks(page);
 
   await page.getByRole('link', {name: 'Nueva cotización'}).click();
@@ -43,8 +49,16 @@ test('operator dashboard keeps commercial actions and no reassignment destinatio
 }) => {
   await login(page, 'operador@enfriamatic.local');
   await expect(page.getByRole('link', {name: 'Nueva cotización'})).toBeVisible();
-  await expect(page.getByRole('link', {name: 'Cotizaciones', exact: true})).toBeVisible();
-  await expect(page.getByRole('link', {name: 'Catálogo comercial', exact: true})).toBeVisible();
+  await expect(
+    page
+      .getByRole('region', {name: 'Acciones rápidas'})
+      .getByRole('link', {name: 'Cotizaciones', exact: true}),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole('region', {name: 'Acciones rápidas'})
+      .getByRole('link', {name: 'Catálogo comercial', exact: true}),
+  ).toBeVisible();
   await expect(page.getByRole('link', {name: 'Usuarios y permisos'})).toHaveCount(0);
   await expectNoRetiredDashboardLinks(page);
 });
