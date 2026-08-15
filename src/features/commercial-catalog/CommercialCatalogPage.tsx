@@ -27,6 +27,7 @@ export function CommercialCatalogPage() {
   const [category, setCategory] = useState('all');
   const [unit, setUnit] = useState('all');
   const [status, setStatus] = useState('all');
+  const [sort, setSort] = useState('az');
   const catalog = usePaginatedCollection<CatalogItem>(
     'catalogItems',
     profile?.role === 'operator'
@@ -42,7 +43,6 @@ export function CommercialCatalogPage() {
     true,
     `${profile?.role ?? 'operator'}|${status}|${search}|${type}|${category}|${unit}|${sort}`,
   );
-  const [sort, setSort] = useState('az');
   const [editing, setEditing] = useState<CatalogItem | 'new' | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
