@@ -1,57 +1,49 @@
-import {useEffect, useMemo, useState} from 'react';
+import {useMemo, useState} from 'react';
 import {Link} from 'wouter';
 import {useAuth} from '../../app/providers/AuthProvider';
 import {Icon, type IconName} from '../../components/Icon';
 import {PageHeader} from '../../components/PageHeader';
 import {StatePanel} from '../../components/StatePanel';
-import type {Quote, ServiceRequest, UserProfile} from '../../models/domain';
+import type {Quote} from '../../models/domain';
 import {constraints} from '../../services/firebase/data';
 import {useCollection} from '../../hooks/useCollection';
 import {formatCurrency, formatDate} from '../../utils/format';
 
-const requestLabels = {
-  pending: 'Pendiente',
-  assigned: 'Asignada',
-  in_progress: 'En progreso',
-  completed: 'Completada',
+const quoteStatusLabels: Record<Quote['status'], string> = {
+  draft: 'Borrador',
+  issued: 'Emitida',
+  sent: 'Enviada',
+  accepted: 'Aceptada',
+  rejected: 'Rechazada',
   cancelled: 'Cancelada',
-} as const;
+  expired: 'Vencida',
+};
 
 export function DashboardPage() {
   const {profile} = useAuth();
-  const requestConstraints = useMemo(
-    () => (profile?.role === 'operator' ? [constraints.assignedTo(profile.uid)] : []),
-    [profile],
-  );
   const quoteConstraints = useMemo(
-    () => (profile?.role === 'operator' ? [constraints.assignedTo(profile.uid)] : []),
+    () => [
+      ...(profile?.role === 'operator' ? [constraints.assignedTo(profile.uid)] : []),
+      constraints.newestUpdated(),
+    ],
     [profile],
   );
-  const requests = useCollection<ServiceRequest>('requests', requestConstraints, 50);
-  const quotes = useCollection<Quote>('quotes', quoteConstraints, 50);
-  const users = useCollection<UserProfile>('users', [], 100, profile?.role === 'admin');
+  const quotes = useCollection<Quote>('quotes', quoteConstraints, 20);
   const [refreshing, setRefreshing] = useState(false);
   const [updatedAt, setUpdatedAt] = useState(new Date());
-  const [, tick] = useState(0);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => tick((value) => value + 1), 30_000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   const refresh = async () => {
     setRefreshing(true);
-    await Promise.all([requests.reload(), quotes.reload(), users.reload()]);
+    await quotes.reload();
     setUpdatedAt(new Date());
     setRefreshing(false);
   };
 
-  if (requests.loading || quotes.loading)
-    return <StatePanel kind="loading" title="Preparando tu panel…" />;
-  if (requests.error || quotes.error) {
+  if (quotes.loading) return <StatePanel kind="loading" title="Preparando tu panel…" />;
+  if (quotes.error) {
     return (
       <StatePanel kind="error" title="No fue posible cargar el panel">
-        <p>{requests.error ?? quotes.error}</p>
+        <p>{quotes.error}</p>
         <button className="button button--secondary" onClick={() => void refresh()}>
           Reintentar
         </button>
@@ -59,36 +51,21 @@ export function DashboardPage() {
     );
   }
 
-  const pending = requests.data.filter((item) => item.status === 'pending').length;
-  const assigned = requests.data.filter((item) => item.status === 'assigned').length;
-  const inProgress = requests.data.filter((item) => item.status === 'in_progress').length;
+  const recentQuotes = quotes.data.slice(0, 7);
   const drafts = quotes.data.filter((item) => item.status === 'draft').length;
   const failed = quotes.data.filter((item) => item.documentStatus === 'failed').length;
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
-  const issuedThisMonth = quotes.data.filter(
-    (item) => item.issuedAt?.toDate && item.issuedAt.toDate() >= monthStart,
-  );
-  const issuedTotal = issuedThisMonth.reduce((sum, item) => sum + item.grandTotal, 0);
-  const recentThreshold = Date.now() - 5 * 60_000;
-  const recentOperators = users.data.filter(
-    (item) =>
-      item.role === 'operator' &&
-      item.status === 'active' &&
-      item.lastActivityAt?.toMillis &&
-      item.lastActivityAt.toMillis() >= recentThreshold,
-  ).length;
+  const issued = quotes.data.filter((item) => item.status === 'issued');
+  const issuedTotal = issued.reduce((sum, item) => sum + item.grandTotal, 0);
 
   return (
     <>
       <PageHeader
-        eyebrow="Centro de operación"
+        eyebrow="Centro comercial"
         title={`Buen día, ${profile?.displayName.split(' ')[0] ?? ''}`}
         description={
           profile?.role === 'admin'
-            ? 'Prioridades, excepciones y acciones operativas en una sola vista.'
-            : 'Tus asignaciones y cotizaciones prioritarias están reunidas aquí.'
+            ? 'Supervisión comercial y seguimiento de cotizaciones.'
+            : 'Preparación y seguimiento de tus cotizaciones.'
         }
         actions={
           <div className="refresh-control">
@@ -105,79 +82,73 @@ export function DashboardPage() {
         }
       />
       <section className="dashboard-actions" aria-label="Acciones rápidas">
-        <QuickAction href="/requests?new=1" icon="request" label="Nueva solicitud" adminOnly />
         <QuickAction href="/quotes?new=1" icon="quote" label="Nueva cotización" />
-        <QuickAction href="/clients?new=1" icon="client" label="Registrar cliente" adminOnly />
-        <QuickAction href="/sites?new=1" icon="site" label="Nueva instalación" adminOnly />
-        <QuickAction href="/equipment?new=1" icon="equipment" label="Registrar equipo" adminOnly />
+        <QuickAction href="/quotes" icon="quote" label="Cotizaciones" />
+        <QuickAction href="/clients" icon="client" label="Clientes" />
+        <QuickAction href="/commercial-catalog" icon="catalog" label="Catálogo comercial" />
         <QuickAction href="/support" icon="support" label="Manual / Soporte" />
       </section>
       {failed > 0 && (
         <Link href="/quotes?documentStatus=failed" className="dashboard-alert">
           <span>
             <strong>
-              {failed} PDF {failed === 1 ? 'requiere' : 'requieren'} atención
+              {failed} documento{failed === 1 ? '' : 's'} reciente{failed === 1 ? '' : 's'} con
+              fallo
             </strong>
             <small>El folio se conserva; abre la cotización para reintentar.</small>
           </span>
           <span>Revisar →</span>
         </Link>
       )}
-      <section className="metrics-grid metrics-grid--operational" aria-label="Indicadores">
+      <section
+        className="metrics-grid metrics-grid--operational"
+        aria-label="Resumen comercial reciente"
+      >
         <Metric
-          href="/requests?status=pending"
-          icon="request"
-          label={profile?.role === 'admin' ? 'Pendientes' : 'Asignadas'}
-          value={profile?.role === 'admin' ? pending : assigned}
+          href="/quotes?status=draft"
+          icon="quote"
+          label="Borradores recientes"
+          value={drafts}
+          caption="En las últimas cotizaciones"
           tone="warning"
         />
         <Metric
-          href="/requests?status=in_progress"
-          icon="activity"
-          label="En progreso"
-          value={inProgress}
+          href="/quotes?status=issued"
+          icon="quote"
+          label="Emitidas recientes"
+          value={issued.length}
+          caption="En las últimas cotizaciones"
+          tone="success"
         />
-        <Metric href="/quotes?status=draft" icon="quote" label="Borradores" value={drafts} />
-        {profile?.role === 'admin' && (
-          <Metric
-            href="/users?recent=1"
-            icon="users"
-            label="Operadores con actividad reciente"
-            value={recentOperators}
-            tone="success"
-          />
-        )}
-        {profile?.role === 'admin' && (
-          <Metric
-            href="/quotes?period=current-month"
-            icon="quote"
-            label="Monto emitido del mes"
-            value={formatCurrency(issuedTotal)}
-            caption={`${issuedThisMonth.length} cotizaciones emitidas`}
-            wide
-          />
-        )}
+        <Metric
+          href="/quotes"
+          icon="quote"
+          label="Monto emitido reciente"
+          value={formatCurrency(issuedTotal)}
+          caption="No representa un total histórico"
+          wide
+        />
       </section>
       <div className="dashboard-grid">
         <section className="panel">
           <div className="panel__header">
             <div>
-              <p className="eyebrow">Trabajo activo</p>
-              <h2>Solicitudes recientes</h2>
+              <p className="eyebrow">Actividad comercial</p>
+              <h2>Cotizaciones recientes</h2>
             </div>
-            <Link href="/requests">Ver todas</Link>
+            <Link href="/quotes">Ver cotizaciones</Link>
           </div>
-          {requests.data.length === 0 ? (
-            <p className="empty-copy">No hay solicitudes en este momento.</p>
+          {recentQuotes.length === 0 ? (
+            <p className="empty-copy">No hay cotizaciones recientes.</p>
           ) : (
             <div className="stack-list">
-              {requests.data.slice(0, 7).map((request) => (
-                <Link href={`/requests/${request.id}`} className="stack-row" key={request.id}>
+              {recentQuotes.map((quote) => (
+                <Link href={`/quotes/${quote.id}`} className="stack-row" key={quote.id}>
                   <div>
-                    <strong>{request.title}</strong>
+                    <strong>{quote.folio || 'Borrador sin folio'}</strong>
                     <span>
-                      {requestLabels[request.status]} · {priorityLabel(request.priority)} ·{' '}
-                      {formatDate(request.updatedAt)}
+                      Cliente {quote.clientId} · {quoteStatusLabels[quote.status]} ·{' '}
+                      {formatCurrency(quote.grandTotal)} · {formatDate(quote.updatedAt)}
                     </span>
                   </div>
                   <span>→</span>
@@ -195,19 +166,19 @@ export function DashboardPage() {
           </div>
           <div className="focus-list">
             <FocusItem
-              value={pending}
-              label="solicitudes pendientes por asignar"
-              href="/requests?status=pending"
-            />
-            <FocusItem
-              value={inProgress}
-              label="trabajos actualmente en progreso"
-              href="/requests?status=in_progress"
-            />
-            <FocusItem
               value={drafts}
-              label="cotizaciones en borrador"
+              label="cotizaciones recientes en borrador"
               href="/quotes?status=draft"
+            />
+            <FocusItem
+              value={failed}
+              label="documentos recientes con fallo"
+              href="/quotes?documentStatus=failed"
+            />
+            <FocusItem
+              value={recentQuotes.length}
+              label="cotizaciones recientes visibles"
+              href="/quotes"
             />
           </div>
         </section>
@@ -219,18 +190,7 @@ export function DashboardPage() {
     </>
   );
 
-  function QuickAction({
-    href,
-    icon,
-    label,
-    adminOnly = false,
-  }: {
-    href: string;
-    icon: IconName;
-    label: string;
-    adminOnly?: boolean;
-  }) {
-    if (adminOnly && profile?.role !== 'admin') return null;
+  function QuickAction({href, icon, label}: {href: string; icon: IconName; label: string}) {
     return (
       <Link href={href}>
         <span>
@@ -287,10 +247,5 @@ function FocusItem({value, label, href}: {value: number; label: string; href: st
 function relativeTime(date: Date): string {
   const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
   if (seconds < 45) return 'hace unos segundos';
-  const minutes = Math.floor(seconds / 60);
-  return `hace ${minutes} min`;
-}
-
-function priorityLabel(priority: ServiceRequest['priority']): string {
-  return {low: 'Baja', normal: 'Normal', high: 'Alta', urgent: 'Urgente'}[priority];
+  return `hace ${Math.floor(seconds / 60)} min`;
 }

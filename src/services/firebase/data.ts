@@ -228,6 +228,7 @@ export async function deleteQuoteItem(quoteId: string, itemId: string): Promise<
 
 export const constraints = {
   newest: () => orderBy('createdAt', 'desc'),
+  newestUpdated: () => orderBy('updatedAt', 'desc'),
   byClient: (clientId: string) => where('clientId', '==', clientId),
   bySite: (siteId: string) => where('siteId', '==', siteId),
   byEquipment: (equipmentId: string) => where('equipmentId', '==', equipmentId),
