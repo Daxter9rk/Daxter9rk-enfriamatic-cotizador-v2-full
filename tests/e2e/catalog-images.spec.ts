@@ -298,9 +298,7 @@ test('commercial catalog UI persists a private image and keeps operator read-onl
       has: page.getByRole('heading', {name: itemName}),
     });
     await expect(card.getByRole('img', {name: `Imagen de ${itemName}`})).toHaveCount(0);
-    await page.getByRole('link', {name: 'Actividad', exact: true}).click();
-    await page.getByRole('searchbox', {name: 'Buscar'}).fill(itemName);
-    await expect(page.getByText(/eliminó la imagen del artículo/i)).toBeVisible();
+    await expect(page.getByRole('link', {name: 'Actividad', exact: true})).toHaveCount(0);
   } finally {
     await deleteAdminApp(adminApp);
   }

@@ -40,10 +40,8 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
   const suffix = String(Date.now()).slice(-7);
   const productName = `Producto E2E ${suffix}`;
   const serviceName = `Servicio E2E ${suffix}`;
-  const clientName = `Cliente E2E ${suffix}`;
-  const siteName = `Planta E2E ${suffix}`;
-  const equipmentName = `Chiller E2E ${suffix}`;
-  const requestTitle = `Diagnóstico E2E ${suffix}`;
+  const clientName = 'Procesos Fríos del Bajío';
+  const requestTitle = 'Diagnóstico del chiller';
 
   await login(page);
   await page.getByRole('link', {name: 'Catálogo comercial', exact: true}).click();
@@ -60,52 +58,8 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
     price: '2000',
   });
 
-  await page.getByRole('link', {name: 'Clientes', exact: true}).click();
-  await page.getByTestId('new-clients').click();
-  await page.getByTestId('clients-name').fill(clientName);
-  await page.getByRole('button', {name: 'Guardar'}).click();
-  await expect(page.getByRole('heading', {name: clientName})).toBeVisible();
-
-  await page.getByRole('link', {name: 'Instalaciones', exact: true}).click();
-  await page.getByTestId('new-sites').click();
-  await page.getByLabel('Cliente').selectOption({label: clientName});
-  await page.getByTestId('sites-name').fill(siteName);
-  await page.getByLabel('Calle').fill('Avenida Industrial');
-  await page.getByLabel('Ciudad').fill('Querétaro');
-  await page.getByRole('textbox', {name: 'Estado', exact: true}).fill('Querétaro');
-  await page.getByLabel('Código postal').fill('76000');
-  await page.getByRole('button', {name: 'Guardar'}).click();
-  await expect(page.getByRole('heading', {name: siteName})).toBeVisible();
-
-  await page.getByRole('link', {name: 'Equipos', exact: true}).click();
-  await page.getByTestId('new-equipment').click();
-  const equipmentDialog = page.getByRole('dialog');
-  await equipmentDialog.getByLabel('Cliente').selectOption({label: clientName});
-  await equipmentDialog.getByLabel('Instalación').selectOption({label: siteName});
-  await equipmentDialog.getByTestId('equipment-name').fill(equipmentName);
-  await equipmentDialog.getByLabel('Categoría').fill('Chiller');
-  await equipmentDialog.getByRole('button', {name: 'Guardar'}).click();
-  await expect(page.getByRole('heading', {name: equipmentName})).toBeVisible();
-
-  await page.getByRole('link', {name: 'Solicitudes', exact: true}).click();
-  await page.getByTestId('new-request').click();
-  const requestDialog = page.getByRole('dialog');
-  await requestDialog.getByLabel('Cliente').fill(clientName);
-  await requestDialog.getByRole('option', {name: clientName}).click();
-  await requestDialog.getByLabel('Instalación', {exact: true}).fill(siteName);
-  await requestDialog.getByRole('option', {name: siteName}).click();
-  await requestDialog.getByLabel('Equipo específico').check();
-  await requestDialog.getByLabel('Equipo', {exact: true}).fill(equipmentName);
-  await requestDialog.getByRole('option', {name: equipmentName}).click();
-  await requestDialog.getByTestId('request-title').fill(requestTitle);
-  await requestDialog.getByLabel('Descripción').fill('Validación integral con emuladores.');
-  await requestDialog.getByLabel('Responsable (opcional)').fill('Operador Emulador');
-  await requestDialog.getByRole('option', {name: /Operador Emulador/}).click();
-  await requestDialog.getByRole('button', {name: 'Crear solicitud'}).click();
-  await expect(page.getByText(requestTitle)).toBeVisible();
-  await page.getByRole('link', {name: 'Solicitudes', exact: true}).click();
-  await page.getByText(requestTitle).click();
-  await page.getByRole('button', {name: 'Iniciar solicitud'}).click();
+  await page.goto('/quotes', {waitUntil: 'domcontentloaded'});
+  await expect(page.getByRole('heading', {name: 'Cotizaciones'})).toBeVisible();
   await page.getByRole('link', {name: 'Cotizaciones', exact: true}).click();
   await page.getByTestId('new-quote').click();
   await page.getByTestId('quote-client').selectOption({label: clientName});
@@ -163,21 +117,5 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
     timeout: 15_000,
   });
   await page.getByRole('dialog').getByRole('button', {name: 'Cerrar', exact: true}).click();
-  await page.getByRole('link', {name: 'Actividad', exact: true}).click();
-  await expect(page.getByText(/marcó como enviada la cotización/i)).toBeVisible();
-  await expect(page.getByText(/aceptó la cotización/i)).toBeVisible();
-  await expect
-    .poll(
-      async () => {
-        await page.getByRole('button', {name: 'Actualizar'}).click();
-        return page.getByText(/creó una corrección de la cotización/i).count();
-      },
-      {
-        timeout: 15_000,
-        intervals: [250, 500, 1000],
-        message:
-          'El evento quote.correction_created no apareció después de refrescar la auditoría.',
-      },
-    )
-    .toBeGreaterThan(0);
+  await expect(page.getByRole('link', {name: 'Actividad', exact: true})).toHaveCount(0);
 });
