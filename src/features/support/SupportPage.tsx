@@ -1,65 +1,53 @@
-import {useMemo, useState, type FormEvent} from 'react';
-import {deleteObject, ref, uploadBytes} from 'firebase/storage';
+import {useState, type FormEvent} from 'react';
 import {useAuth} from '../../app/providers/AuthProvider';
 import {PageHeader} from '../../components/PageHeader';
-import {StatePanel} from '../../components/StatePanel';
-import {useCollection} from '../../hooks/useCollection';
-import type {SupportRequest} from '../../models/domain';
 import {supportRequestInputSchema} from '../../models/schemas';
-import {
-  constraints,
-  createKnownDocument,
-  createDocument,
-  reserveDocumentId,
-  updateDocument,
-} from '../../services/firebase/data';
-import {storage} from '../../services/firebase/config';
-import {formatDate} from '../../utils/format';
-import {
-  buildPrivateStoragePath,
-  runCompensatedUpload,
-  sanitizeVisibleFileName,
-  validatePrivateFile,
-} from '../../utils/privateFiles';
 
 const faqs = [
   [
-    '¿Cómo corrijo una cotización emitida?',
-    'Crea una corrección desde la cotización. El sistema conserva el original y reserva un folio nuevo.',
+    '¿Cómo creo una cotización?',
+    'Abre Cotizaciones, inicia una cotización nueva, selecciona un Cliente, agrega contexto y partidas, guarda el borrador y revisa Preview antes de emitir.',
   ],
   [
-    '¿Por qué no puedo editar una solicitud?',
-    'Las solicitudes completadas o canceladas están bloqueadas. Un administrador puede reabrir una completada con motivo.',
+    '¿Por qué no puedo editar una cotización emitida?',
+    'La emisión conserva el documento y su PDF. Para cambiarlo debes crear una corrección, que genera una nueva revisión sin alterar el original.',
   ],
   [
-    '¿Dónde consulto un plano?',
-    'Abre el detalle de la instalación y revisa la sección Archivos y croquis.',
+    '¿Qué hago si no encuentro un registro?',
+    'Revisa los filtros, la búsqueda y la paginación. Los operadores sólo ven registros dentro de su alcance autorizado.',
   ],
   [
-    '¿La actividad reciente indica quién está en línea?',
-    'No. Sólo indica interacción reciente dentro de una ventana aproximada de cinco minutos.',
+    '¿Por qué no puedo acceder a una sección?',
+    'La navegación depende de tu rol y estado. Configuración y Usuarios son funciones administrativas; los módulos retirados no forman parte del MVP activo.',
   ],
+  [
+    '¿Cómo genero nuevamente un PDF fallido?',
+    'Abre el borrador o la cotización con el estado visible, corrige el problema indicado y utiliza la acción autorizada de emisión o descarga. No crees duplicados.',
+  ],
+];
+
+const modules = [
+  'General',
+  'Inicio',
+  'Clientes',
+  'Cotizaciones',
+  'Catálogo comercial',
+  'Configuración',
 ];
 
 export function SupportPage() {
   const {profile} = useAuth();
-  const queryConstraints = useMemo(
-    () => (profile?.role === 'admin' ? [] : profile ? [constraints.createdBy(profile.uid)] : []),
-    [profile],
-  );
-  const requests = useCollection<SupportRequest>('supportRequests', queryConstraints, 30);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
+  const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!profile) return;
+    if (!profile || saving) return;
     setSaving(true);
     setMessage(null);
     try {
       const form = new FormData(event.currentTarget);
-      const attachment = form.get('attachment');
-      const input = supportRequestInputSchema.parse({
+      supportRequestInputSchema.parse({
         category: 'technical',
         subject: form.get('intent'),
         description: form.get('outcome'),
@@ -72,77 +60,38 @@ export function SupportPage() {
         browser: navigator.userAgent.slice(0, 300),
         reporterRole: profile.role,
       });
-      if (attachment instanceof File && attachment.size > 0) {
-        validatePrivateFile(attachment, 'support');
-        const supportId = reserveDocumentId('supportRequests');
-        const fileId = crypto.randomUUID();
-        const storagePath = buildPrivateStoragePath('support', supportId, fileId, attachment.type);
-        await runCompensatedUpload({
-          resourceType: 'support',
-          resourceId: supportId,
-          createMetadata: () =>
-            createKnownDocument(
-              'supportRequests',
-              supportId,
-              {
-                ...input,
-                attachmentStoragePath: storagePath,
-                attachmentFileName: sanitizeVisibleFileName(attachment.name),
-                attachmentMimeType: attachment.type,
-                attachmentSizeBytes: attachment.size,
-                attachmentStatus: 'pending',
-              },
-              profile.uid,
-            ),
-          uploadStorage: () =>
-            uploadBytes(ref(storage, storagePath), attachment, {
-              contentType: attachment.type,
-              customMetadata: {resourceType: 'support', resourceId: supportId, fileId},
-            }).then(() => undefined),
-          finalizeLink: () =>
-            updateDocument('supportRequests', supportId, {attachmentStatus: 'ready'}, profile.uid),
-          cleanupStorage: () => deleteObject(ref(storage, storagePath)),
-          cleanupMetadata: () =>
-            updateDocument('supportRequests', supportId, {attachmentStatus: 'failed'}, profile.uid),
-        });
-      } else {
-        await createDocument('supportRequests', input, profile.uid);
-      }
       event.currentTarget.reset();
-      setMessage('Reporte recibido. Puedes consultar su avance en esta página.');
-      await requests.reload();
+      setMessage(
+        'La solicitud fue validada en modo demostración. No se envió información a un servicio externo.',
+      );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No fue posible registrar la solicitud.');
+      setMessage(error instanceof Error ? error.message : 'Revisa los campos obligatorios.');
     } finally {
       setSaving(false);
     }
-  };
-
-  const copyTechnicalInfo = async () => {
-    await navigator.clipboard.writeText(
-      `Enfriamatic Cotizador V2.1.0-dev\nMódulo: ${window.location.pathname}\nNavegador: ${navigator.userAgent.split(' ').slice(0, 4).join(' ')}`,
-    );
-    setMessage('Información técnica no sensible copiada.');
   };
 
   return (
     <>
       <PageHeader
         eyebrow="Ayuda"
-        title="Ayuda y reportes"
-        description="Cuéntanos qué ocurrió con palabras sencillas; el contexto técnico se agrega automáticamente."
-        actions={
-          <button className="button button--secondary" onClick={() => void copyTechnicalInfo()}>
-            Copiar información técnica
-          </button>
-        }
+        title="Centro de ayuda y soporte"
+        description="Encuentra respuestas breves o valida una solicitud de soporte en el entorno de demostración."
       />
+      <section className="panel support-demo-notice" aria-label="Modo demostración">
+        <p className="eyebrow">Modo demostración</p>
+        <strong>No envía correos ni crea tickets externos.</strong>
+        <p>
+          El formulario sólo valida los datos en esta pantalla y no solicita contraseñas, tokens ni
+          información bancaria.
+        </p>
+      </section>
       <div className="support-layout">
         <section className="panel">
           <div className="panel__header">
             <div>
-              <p className="eyebrow">Autoservicio</p>
-              <h2>Preguntas frecuentes</h2>
+              <p className="eyebrow">Preguntas frecuentes</p>
+              <h2>Ayuda rápida</h2>
             </div>
           </div>
           <div className="faq-list">
@@ -153,15 +102,18 @@ export function SupportPage() {
               </details>
             ))}
           </div>
+          <a className="button button--secondary" href="/manual">
+            Abrir manual de mi perfil
+          </a>
         </section>
         <section className="panel">
           <div className="panel__header">
             <div>
-              <p className="eyebrow">Contacto</p>
-              <h2>Pedir ayuda o reportar un problema</h2>
+              <p className="eyebrow">Soporte simulado</p>
+              <h2>Describir un problema</h2>
             </div>
           </div>
-          <form className="form-grid" onSubmit={(event) => void submit(event)}>
+          <form className="form-grid" onSubmit={submit}>
             <label className="field-wide">
               ¿Qué intentabas hacer?
               <input name="intent" required minLength={4} maxLength={160} />
@@ -169,13 +121,9 @@ export function SupportPage() {
             <label>
               ¿En qué sección ocurrió?
               <select name="module" defaultValue="General">
-                <option>General</option>
-                <option>Inicio</option>
-                <option>Solicitudes</option>
-                <option>Cotizaciones</option>
-                <option>Instalaciones</option>
-                <option>Equipos</option>
-                <option>Configuración</option>
+                {modules.map((module) => (
+                  <option key={module}>{module}</option>
+                ))}
               </select>
             </label>
             <label>
@@ -189,55 +137,20 @@ export function SupportPage() {
               ¿Qué ocurrió?
               <textarea name="outcome" required minLength={10} maxLength={4000} />
             </label>
-            <label className="field-wide">
-              ¿Quieres agregar una captura? (JPG, PNG o WebP; máximo 5 MB)
-              <input name="attachment" type="file" accept="image/jpeg,image/png,image/webp" />
-            </label>
-            <p className="form-message field-wide">No incluyas contraseñas ni datos bancarios.</p>
-            {message && <p className="form-message field-wide">{message}</p>}
+            <p className="form-message field-wide">
+              No incluyas contraseñas, tokens, datos bancarios ni otros secretos.
+            </p>
+            {message && (
+              <p className="form-message field-wide" role="status">
+                {message}
+              </p>
+            )}
             <button className="button button--primary field-wide" disabled={saving}>
-              {saving ? 'Enviando…' : 'Enviar reporte'}
+              {saving ? 'Validando…' : 'Validar solicitud'}
             </button>
           </form>
         </section>
       </div>
-      <section className="panel support-history">
-        <div className="panel__header">
-          <div>
-            <p className="eyebrow">Seguimiento</p>
-            <h2>{profile?.role === 'admin' ? 'Solicitudes recientes' : 'Mis solicitudes'}</h2>
-          </div>
-        </div>
-        {requests.error ? (
-          <StatePanel kind="error" title="No fue posible consultar soporte" />
-        ) : requests.data.length === 0 ? (
-          <p className="empty-copy">Aún no hay solicitudes registradas.</p>
-        ) : (
-          <div className="stack-list">
-            {requests.data.map((item) => (
-              <div className="stack-row" key={item.id}>
-                <div>
-                  <strong>{item.subject}</strong>
-                  <span>
-                    {item.module} · {statusLabel(item.status)} · {formatDate(item.createdAt)}
-                  </span>
-                </div>
-                <span className={`badge badge--${item.status}`}>{statusLabel(item.status)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
     </>
   );
-}
-
-function statusLabel(status: SupportRequest['status']) {
-  return {
-    open: 'Reporte recibido',
-    in_progress: 'En revisión',
-    needs_information: 'Necesitamos más información',
-    resolved: 'Resuelto',
-    closed: 'Resuelto',
-  }[status];
 }

@@ -24,15 +24,6 @@ export function ManualPage() {
         eyebrow="Ayuda operativa"
         title={`Manual de ${roleLabel}`}
         description="Procedimientos completos, restricciones y recuperación para operar con seguridad."
-        actions={
-          <a
-            className="button button--primary"
-            href={`/manuales/manual-${roleLabel}-v2.1.pdf`}
-            download
-          >
-            Descargar PDF
-          </a>
-        }
       />
       <p className="manual-version">
         <strong>Enfriamatic Cotizador V2.1</strong> · Manual vigente para entorno DEV
