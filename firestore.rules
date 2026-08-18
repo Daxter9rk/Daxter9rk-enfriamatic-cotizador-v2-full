@@ -495,6 +495,7 @@ service cloud.firestore {
           'folio', 'requestId', 'assignedTo', 'clientId', 'siteId',
           'status', 'documentStatus', 'currency', 'taxRate',
           'discountDisplayMode', 'subtotalOriginal', 'discountTotal',
+          'globalDiscountType', 'globalDiscountValue', 'globalDiscountAmount', 'applyTax',
           'subtotalFinal', 'taxTotal', 'grandTotal', 'validityDays',
           'revisionNumber', 'locked',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
@@ -503,6 +504,7 @@ service cloud.firestore {
           'folio', 'requestId', 'assignedTo', 'clientId', 'siteId',
           'equipmentId', 'status', 'documentStatus', 'currency', 'taxRate',
           'discountDisplayMode', 'subtotalOriginal', 'discountTotal',
+          'globalDiscountType', 'globalDiscountValue', 'globalDiscountAmount', 'applyTax',
           'subtotalFinal', 'taxTotal', 'grandTotal', 'notes', 'validityDays',
           'validUntil', 'issuedAt', 'issuedBy', 'originalQuoteId',
           'revisionNumber', 'locked', 'issuanceKey',
@@ -526,6 +528,13 @@ service cloud.firestore {
         && validMoney(data.subtotalOriginal)
         && validMoney(data.discountTotal)
         && validMoney(data.subtotalFinal)
+        && (!(data.keys().hasAny(['globalDiscountType']))
+          || data.globalDiscountType in ['none', 'percentage', 'fixed'])
+        && (!(data.keys().hasAny(['globalDiscountValue']))
+          || validMoney(data.globalDiscountValue))
+        && (!(data.keys().hasAny(['globalDiscountAmount']))
+          || validMoney(data.globalDiscountAmount))
+        && (!(data.keys().hasAny(['applyTax'])) || data.applyTax is bool)
         && validMoney(data.taxTotal)
         && validMoney(data.grandTotal)
         && validOptionalString(data, 'notes', 4000)
@@ -560,6 +569,13 @@ service cloud.firestore {
         && validMoney(data.subtotalOriginal)
         && validMoney(data.discountTotal)
         && validMoney(data.subtotalFinal)
+        && (!(data.keys().hasAny(['globalDiscountType']))
+          || data.globalDiscountType in ['none', 'percentage', 'fixed'])
+        && (!(data.keys().hasAny(['globalDiscountValue']))
+          || validMoney(data.globalDiscountValue))
+        && (!(data.keys().hasAny(['globalDiscountAmount']))
+          || validMoney(data.globalDiscountAmount))
+        && (!(data.keys().hasAny(['applyTax'])) || data.applyTax is bool)
         && validMoney(data.taxTotal)
         && validMoney(data.grandTotal)
         && validOptionalString(data, 'notes', 4000)
@@ -935,13 +951,14 @@ service cloud.firestore {
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
         && data.keys().hasOnly([
-          'taxRate', 'validityDays', 'currency', 'folioPrefix',
+          'taxRate', 'applyTax', 'validityDays', 'currency', 'folioPrefix',
           'paymentMethod', 'advance', 'estimatedTerm', 'warranty',
           'exclusions', 'observations', 'devWatermark',
           'dataOrigin', 'seedVersion', 'seedTag',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
         && data.taxRate is number && data.taxRate >= 0 && data.taxRate <= 1
+        && (!(data.keys().hasAny(['applyTax'])) || data.applyTax is bool)
         && data.validityDays is int
         && data.validityDays >= 1 && data.validityDays <= 365
         && data.currency == 'MXN'

@@ -127,6 +127,8 @@ export const quoteItemInputSchema = z.object({
     .optional(),
 });
 
+export const globalDiscountTypeSchema = z.enum(['none', 'percentage', 'fixed']);
+
 export const catalogItemInputSchema = z.object({
   code: z
     .string()

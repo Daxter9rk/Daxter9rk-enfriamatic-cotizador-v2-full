@@ -10,8 +10,17 @@ export interface QuoteTotals {
   subtotalOriginal: number;
   discountTotal: number;
   subtotalFinal: number;
+  globalDiscountAmount?: number;
+  taxableBase?: number;
   taxTotal: number;
   grandTotal: number;
+}
+
+export type GlobalDiscountType = 'none' | 'percentage' | 'fixed';
+
+export interface GlobalDiscountInput {
+  type: GlobalDiscountType;
+  value: number;
 }
 
 export interface CalculableItem {
@@ -32,10 +41,8 @@ export function calculateItem(item: CalculableItem): CalculatedItem {
   if (!Number.isFinite(item.originalUnitPrice) || item.originalUnitPrice < 0) {
     throw new Error('El precio no puede ser negativo.');
   }
-
   const originalLine = roundMoney(item.quantity * item.originalUnitPrice);
   let discountAmount = 0;
-
   if (item.discountType === 'percentage') {
     if (item.discountValue < 0 || item.discountValue > 100) {
       throw new Error('El descuento porcentual debe estar entre 0 y 100.');
@@ -47,7 +54,6 @@ export function calculateItem(item: CalculableItem): CalculatedItem {
     }
     discountAmount = roundMoney(item.discountValue);
   }
-
   const lineSubtotal = roundMoney(originalLine - discountAmount);
   return {
     discountAmount,
@@ -56,33 +62,55 @@ export function calculateItem(item: CalculableItem): CalculatedItem {
   };
 }
 
-export function calculateQuoteTotals(items: CalculableItem[], taxRate: number): QuoteTotals {
+export function calculateQuoteTotals(
+  items: CalculableItem[],
+  taxRate: number,
+  globalDiscount: GlobalDiscountInput = {type: 'none', value: 0},
+  applyTax = true,
+): QuoteTotals {
   if (!Number.isFinite(taxRate) || taxRate < 0 || taxRate > 1) {
     throw new Error('La tasa de impuesto debe expresarse entre 0 y 1.');
   }
-
-  return items.reduce<QuoteTotals>(
+  if (!['none', 'percentage', 'fixed'].includes(globalDiscount.type)) {
+    throw new Error('invalid-global-discount');
+  }
+  if (!Number.isFinite(globalDiscount.value) || globalDiscount.value < 0) {
+    throw new Error('invalid-global-discount');
+  }
+  const lineTotals = items.reduce(
     (totals, item) => {
       const calculated = calculateItem(item);
-      const original = roundMoney(item.quantity * item.originalUnitPrice);
-      // `taxable` remains for historical snapshots; new quotes use global tax.
-      const tax = roundMoney(calculated.lineSubtotal * taxRate);
       return {
-        subtotalOriginal: roundMoney(totals.subtotalOriginal + original),
+        subtotalOriginal: roundMoney(
+          totals.subtotalOriginal + roundMoney(item.quantity * item.originalUnitPrice),
+        ),
         discountTotal: roundMoney(totals.discountTotal + calculated.discountAmount),
         subtotalFinal: roundMoney(totals.subtotalFinal + calculated.lineSubtotal),
-        taxTotal: roundMoney(totals.taxTotal + tax),
-        grandTotal: roundMoney(totals.grandTotal + calculated.lineSubtotal + tax),
       };
     },
-    {
-      subtotalOriginal: 0,
-      discountTotal: 0,
-      subtotalFinal: 0,
-      taxTotal: 0,
-      grandTotal: 0,
-    },
+    {subtotalOriginal: 0, discountTotal: 0, subtotalFinal: 0},
   );
+  const globalDiscountAmount =
+    globalDiscount.type === 'percentage'
+      ? roundMoney(lineTotals.subtotalFinal * (globalDiscount.value / 100))
+      : globalDiscount.type === 'fixed'
+        ? roundMoney(globalDiscount.value)
+        : 0;
+  if (
+    (globalDiscount.type === 'percentage' && globalDiscount.value > 100) ||
+    globalDiscountAmount > lineTotals.subtotalFinal
+  ) {
+    throw new Error('invalid-global-discount');
+  }
+  const taxableBase = roundMoney(lineTotals.subtotalFinal - globalDiscountAmount);
+  const taxTotal = applyTax ? roundMoney(taxableBase * taxRate) : 0;
+  return {
+    ...lineTotals,
+    globalDiscountAmount,
+    taxableBase,
+    taxTotal,
+    grandTotal: roundMoney(taxableBase + taxTotal),
+  };
 }
 
 export const discountModeLabel: Record<DiscountDisplayMode, string> = {

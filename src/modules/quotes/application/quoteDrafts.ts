@@ -29,6 +29,10 @@ export interface QuoteDraftWrite {
   subtotalOriginal: 0;
   discountTotal: 0;
   subtotalFinal: 0;
+  globalDiscountType: 'none';
+  globalDiscountValue: 0;
+  globalDiscountAmount: 0;
+  applyTax: true;
   taxTotal: 0;
   grandTotal: 0;
   notes: null;
@@ -76,6 +80,10 @@ export function createQuoteDraft(input: CreateQuoteDraftInput): QuoteDraftWrite 
     subtotalOriginal: 0,
     discountTotal: 0,
     subtotalFinal: 0,
+    globalDiscountType: 'none',
+    globalDiscountValue: 0,
+    globalDiscountAmount: 0,
+    applyTax: true,
     taxTotal: 0,
     grandTotal: 0,
     notes: null,

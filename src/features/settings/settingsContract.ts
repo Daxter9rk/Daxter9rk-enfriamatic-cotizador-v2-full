@@ -9,6 +9,7 @@ export interface CompanyProfile {
 
 export interface QuoteDefaults {
   taxRate: number;
+  applyTax: boolean;
   validityDays: number;
   currency: 'MXN';
   folioPrefix: string;
@@ -32,6 +33,7 @@ export const emptyCompany: CompanyProfile = {
 
 export const emptyDefaults: QuoteDefaults = {
   taxRate: 0.16,
+  applyTax: true,
   validityDays: 15,
   currency: 'MXN',
   folioPrefix: 'COT',
@@ -55,6 +57,7 @@ const limits: Record<keyof CompanyProfile, number> = {
 
 const defaultLimits: Record<keyof QuoteDefaults, number | null> = {
   taxRate: null,
+  applyTax: null,
   validityDays: null,
   currency: null,
   folioPrefix: 12,
@@ -83,6 +86,7 @@ export function normalizeDefaults(value: Partial<QuoteDefaults> | null): QuoteDe
   const next = {...emptyDefaults, ...(value ?? {})};
   return {
     taxRate: Number(next.taxRate),
+    applyTax: next.applyTax !== false,
     validityDays: Number(next.validityDays),
     currency: 'MXN',
     folioPrefix: next.folioPrefix.trim().toUpperCase(),
@@ -143,6 +147,7 @@ export function validateSettings(company: CompanyProfile, defaults: QuoteDefault
 function fieldLimitsForText(field: string): boolean {
   return (
     field !== 'taxRate' &&
+    field !== 'applyTax' &&
     field !== 'validityDays' &&
     field !== 'currency' &&
     defaultLimits[field as keyof QuoteDefaults] !== null

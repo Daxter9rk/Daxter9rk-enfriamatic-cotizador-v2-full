@@ -190,6 +190,10 @@ export interface Quote extends AuditFields {
   subtotalOriginal: number;
   discountTotal: number;
   subtotalFinal: number;
+  globalDiscountType?: 'none' | 'percentage' | 'fixed';
+  globalDiscountValue?: number;
+  globalDiscountAmount?: number;
+  applyTax?: boolean;
   taxTotal: number;
   grandTotal: number;
   notes?: string | null;

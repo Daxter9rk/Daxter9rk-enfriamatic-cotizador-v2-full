@@ -452,6 +452,12 @@ async function prepareQuote(
     };
   });
   const taxRate = Number(quote.taxRate ?? defaults.taxRate ?? 0.16);
+  const globalDiscountType =
+    quote.globalDiscountType === 'percentage' || quote.globalDiscountType === 'fixed'
+      ? quote.globalDiscountType
+      : 'none';
+  const globalDiscountValue = Number(quote.globalDiscountValue ?? 0);
+  const applyTax = typeof quote.applyTax === 'boolean' ? quote.applyTax : true;
   const totals = calculateQuoteTotals(
     items.map((item) => {
       const original = item.originalUnitPrice;
@@ -464,6 +470,8 @@ async function prepareQuote(
       };
     }),
     taxRate,
+    {type: globalDiscountType, value: globalDiscountValue},
+    applyTax,
   );
   const request = requestId ? await firestore.doc(`requests/${requestId}`).get() : null;
   const requestData = request?.exists ? (request.data() ?? {}) : null;

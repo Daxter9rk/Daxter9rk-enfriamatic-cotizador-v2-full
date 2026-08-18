@@ -141,6 +141,13 @@ async function createIndependentCorrection(
   }
   const copiedItems = itemSnapshot.docs.map((item) => copyItem(item.data()));
   const taxRate = Number(originalQuote.taxRate ?? 0.16);
+  const globalDiscountType =
+    originalQuote.globalDiscountType === 'percentage' ||
+    originalQuote.globalDiscountType === 'fixed'
+      ? originalQuote.globalDiscountType
+      : 'none';
+  const globalDiscountValue = Number(originalQuote.globalDiscountValue ?? 0);
+  const applyTax = typeof originalQuote.applyTax === 'boolean' ? originalQuote.applyTax : true;
   const totals = calculateQuoteTotals(
     copiedItems.map((item) => ({
       quantity: item.quantity,
@@ -150,6 +157,8 @@ async function createIndependentCorrection(
       taxable: true,
     })),
     taxRate,
+    {type: globalDiscountType, value: globalDiscountValue},
+    applyTax,
   );
   const correctionQuoteRef = firestore.collection('quotes').doc();
   const now = FieldValue.serverTimestamp();
@@ -172,6 +181,10 @@ async function createIndependentCorrection(
     currency: originalQuote.currency ?? 'MXN',
     taxRate,
     discountDisplayMode: originalQuote.discountDisplayMode ?? 'detailed',
+    globalDiscountType,
+    globalDiscountValue,
+    globalDiscountAmount: totals.globalDiscountAmount,
+    applyTax,
     ...totals,
     notes: normalizeText(originalQuote.notes),
     validityDays: Number(originalQuote.validityDays ?? 15),
@@ -263,6 +276,13 @@ async function createHistoricalCorrection(
   }
   const copiedItems = itemSnapshot.docs.map((item) => copyItem(item.data()));
   const taxRate = Number(originalQuote.taxRate ?? 0.16);
+  const globalDiscountType =
+    originalQuote.globalDiscountType === 'percentage' ||
+    originalQuote.globalDiscountType === 'fixed'
+      ? originalQuote.globalDiscountType
+      : 'none';
+  const globalDiscountValue = Number(originalQuote.globalDiscountValue ?? 0);
+  const applyTax = typeof originalQuote.applyTax === 'boolean' ? originalQuote.applyTax : true;
   const totals = calculateQuoteTotals(
     copiedItems.map((item) => ({
       quantity: item.quantity,
@@ -272,6 +292,8 @@ async function createHistoricalCorrection(
       taxable: true,
     })),
     taxRate,
+    {type: globalDiscountType, value: globalDiscountValue},
+    applyTax,
   );
   const correctionQuoteRef = firestore.collection('quotes').doc();
   const now = FieldValue.serverTimestamp();
@@ -289,6 +311,10 @@ async function createHistoricalCorrection(
     currency: 'MXN',
     taxRate,
     discountDisplayMode: originalQuote.discountDisplayMode ?? 'detailed',
+    globalDiscountType,
+    globalDiscountValue,
+    globalDiscountAmount: totals.globalDiscountAmount,
+    applyTax,
     ...totals,
     notes: normalizeText(originalQuote.notes),
     validityDays: originalQuote.validityDays ?? 15,

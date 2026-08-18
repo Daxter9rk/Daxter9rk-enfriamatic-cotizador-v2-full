@@ -65,6 +65,10 @@ export interface QuoteDocumentModel {
   totals: QuoteTotals;
   terms: {
     taxRate: number;
+    applyTax: boolean;
+    globalDiscountType: 'none' | 'percentage' | 'fixed';
+    globalDiscountValue: number;
+    globalDiscountAmount: number;
     discountDisplayMode: 'detailed' | 'summary' | 'incorporated';
     notes: string | null;
   };
@@ -112,6 +116,13 @@ export function buildQuoteDocumentModel(input: {
   const independent = requestId === null;
   const validityDays = Number(input.quote.validityDays ?? input.defaults.validityDays ?? 15);
   const taxRate = Number(input.quote.taxRate ?? input.defaults.taxRate ?? 0.16);
+  const applyTax = typeof input.quote.applyTax === 'boolean' ? input.quote.applyTax : true;
+  const globalDiscountType =
+    input.quote.globalDiscountType === 'percentage' || input.quote.globalDiscountType === 'fixed'
+      ? input.quote.globalDiscountType
+      : 'none';
+  const globalDiscountValue = Number(input.quote.globalDiscountValue ?? 0);
+  const globalDiscountAmount = Number(input.quote.globalDiscountAmount ?? 0);
   const request = input.request ?? {};
   const site = input.site ?? {};
   const equipment = input.equipment ?? {};
@@ -170,6 +181,10 @@ export function buildQuoteDocumentModel(input: {
     totals: input.totals,
     terms: {
       taxRate,
+      applyTax,
+      globalDiscountType,
+      globalDiscountValue,
+      globalDiscountAmount,
       discountDisplayMode:
         input.quote.discountDisplayMode === 'summary' ||
         input.quote.discountDisplayMode === 'incorporated'
