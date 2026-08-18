@@ -1,5 +1,8 @@
 import PDFDocument from 'pdfkit';
+import path from 'node:path';
 import type {QuoteDocumentModel} from './quoteDocumentModel';
+
+const DEFAULT_LOGO_PATH = path.resolve(__dirname, '../../assets/enfriamatic-logo-transparent.png');
 
 interface PdfItem {
   quantity: number;
@@ -29,6 +32,9 @@ export interface QuotePdfInput {
   subtotalOriginal: number;
   discountTotal: number;
   subtotalFinal: number;
+  globalDiscountAmount?: number;
+  taxableBase?: number;
+  applyTax?: boolean;
   taxRate: number;
   taxTotal: number;
   grandTotal: number;
@@ -94,15 +100,8 @@ export async function generateQuotePdf(
   const chunks: Buffer[] = [];
   document.on('data', (chunk: Buffer) => chunks.push(chunk));
 
-  if (input.logoPath) {
-    try {
-      document.image(input.logoPath, 44, 38, {fit: [180, 64]});
-    } catch {
-      document.fontSize(18).fillColor('#02557B').text('ENFRIAMATIC', 44, 50);
-    }
-  } else {
-    document.fontSize(18).fillColor('#02557B').text('ENFRIAMATIC', 44, 50);
-  }
+  const logoPath = input.logoPath ?? DEFAULT_LOGO_PATH;
+  document.image(logoPath, 44, 38, {fit: [180, 64]});
 
   document
     .fontSize(9)
@@ -220,16 +219,19 @@ export async function generateQuotePdf(
 
   ensureSpace(document, 150);
   const totalsX = 345;
-  const totals = [
-    [
-      'Subtotal',
-      input.discountDisplayMode === 'incorporated' ? input.subtotalFinal : input.subtotalOriginal,
-    ],
-    ...(input.discountDisplayMode === 'summary' && input.discountTotal > 0
-      ? [['Descuento', -input.discountTotal] as [string, number]]
+  const globalDiscountAmount = input.globalDiscountAmount ?? 0;
+  const taxableBase = input.taxableBase ?? input.subtotalFinal - globalDiscountAmount;
+  const totals: Array<[string, number]> = [
+    ['Subtotal original', input.subtotalOriginal],
+    ...(input.discountTotal > 0
+      ? [['Descuentos por partida', -input.discountTotal] as [string, number]]
       : []),
-    [`IVA ${input.taxRate * 100}%`, input.taxTotal],
-  ] as Array<[string, number]>;
+    ...(globalDiscountAmount > 0
+      ? [['Descuento global', -globalDiscountAmount] as [string, number]]
+      : []),
+    ['Base antes de IVA', taxableBase],
+    [input.applyTax === false ? 'IVA no aplica' : `IVA ${input.taxRate * 100}%`, input.taxTotal],
+  ];
   for (const [label, value] of totals) {
     document
       .fillColor('#647680')
@@ -333,6 +335,7 @@ function toPdfInput(source: QuotePdfInput | QuoteDocumentModel): QuotePdfInput {
       })),
       discountDisplayMode: source.terms.discountDisplayMode,
       ...source.totals,
+      applyTax: source.terms.applyTax,
       taxRate: source.terms.taxRate,
       currency: source.identity.currency,
       validityDays: source.identity.validityDays,

@@ -23,6 +23,9 @@ describe('quote PDF', () => {
       subtotalOriginal: 1000,
       discountTotal: 0,
       subtotalFinal: 1000,
+      globalDiscountAmount: 0,
+      taxableBase: 1000,
+      applyTax: true,
       taxRate: 0.16,
       taxTotal: 160,
       grandTotal: 1160,
@@ -35,6 +38,40 @@ describe('quote PDF', () => {
     const physicalPages = result.bytes.toString('latin1').match(/\/Type\s*\/Page\b/g) ?? [];
     expect(result.pageCount).toBe(1);
     expect(physicalPages).toHaveLength(result.pageCount);
+  });
+
+  it('renders trusted global discount totals and disabled IVA without recalculation', async () => {
+    const result = await generateQuotePdf({
+      folio: 'COT-2026-000002',
+      issuedAt: new Date('2026-01-01T00:00:00Z'),
+      clientName: 'Cliente de prueba',
+      items: [
+        {
+          quantity: 1,
+          unit: 'servicio',
+          description: 'Diagnóstico',
+          originalUnitPrice: 1000,
+          discountAmount: 0,
+          lineSubtotal: 1000,
+        },
+      ],
+      discountDisplayMode: 'detailed',
+      subtotalOriginal: 1000,
+      discountTotal: 0,
+      subtotalFinal: 1000,
+      globalDiscountAmount: 100,
+      taxableBase: 900,
+      applyTax: false,
+      taxRate: 0.16,
+      taxTotal: 0,
+      grandTotal: 900,
+      currency: 'MXN',
+      validityDays: 15,
+      watermark: 'DOCUMENTO DE PRUEBA - DEV',
+    });
+
+    expect(result.bytes.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+    expect(result.pageCount).toBe(1);
   });
 
   it('grows long rows and repeats pages without duplicating the business data', async () => {
