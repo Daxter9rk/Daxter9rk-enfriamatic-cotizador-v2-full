@@ -192,7 +192,7 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'name', 'legalName', 'rfc', 'contactName', 'email', 'phone',
-          'billingAddress', 'status', 'notes', 'operatorIds',
+          'billingAddress', 'addressFull', 'postalCode', 'status', 'notes', 'operatorIds',
           'dataOrigin', 'seedVersion', 'seedTag',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
@@ -205,6 +205,9 @@ service cloud.firestore {
         && (!(data.keys().hasAny(['billingAddress']))
           || validAddress(data.billingAddress))
         && validOptionalString(data, 'notes', 2000)
+        && validOptionalString(data, 'addressFull', 500)
+        && (!(data.keys().hasAny(['postalCode'])) || data.postalCode == null
+          || (data.postalCode is string && data.postalCode.matches('^[0-9]{5}$')))
         && data.status in ['active', 'inactive']
         && validOperatorAcl(data)
         && validSeedMetadata(data);

@@ -60,7 +60,7 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
     [{field: 'name', direction: 'asc'}],
     25,
     true,
-    `${kind}|${profile?.uid ?? 'admin'}|${statusFilter}|${search}`,
+    `${kind}|${profile?.uid ?? 'admin'}|${statusFilter}`,
   );
   const clients = useCollection<Client>('clients', operatorConstraints);
   const sites = useCollection<Site>('sites', operatorConstraints);
@@ -150,7 +150,7 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
       closeEditor();
       await Promise.all([records.reload(), clients.reload(), sites.reload()]);
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'No se pudo guardar el registro.');
+      setFormError(formatFormError(error));
     } finally {
       setSaving(false);
     }
@@ -278,7 +278,10 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
           </>
         )}
         <div className="view-toggle" aria-label="Tipo de vista">
-          {(['cards', 'list', 'table'] as const).map((option) => (
+          {(kind === 'clients'
+            ? (['cards', 'table'] as const)
+            : (['cards', 'list', 'table'] as const)
+          ).map((option) => (
             <button
               key={option}
               className={view === option ? 'active' : undefined}
@@ -319,7 +322,9 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
           {filtered.map((record) => (
             <article className="record-card" key={record.id}>
               <div className="record-card__top">
-                <span className={`badge badge--${record.status}`}>{record.status}</span>
+                <span className={`badge badge--${record.status}`}>
+                  {statusLabel(record.status)}
+                </span>
                 {profile?.role === 'admin' && (
                   <button className="text-button" onClick={() => setEditing(record)}>
                     Editar
@@ -471,7 +476,7 @@ function MasterForm({
             />
           </label>
           <label>
-            Contacto
+            Persona de contacto
             <input
               name="contactName"
               maxLength={160}
@@ -504,69 +509,32 @@ function MasterForm({
             />
           </label>
           <h3 className="field-wide form-section-title">
-            Dirección administrativa / fiscal <span>Opcional</span>
+            Dirección <span>Opcional</span>
           </h3>
           <label className="field-wide">
-            Calle
-            <input
-              name="billingStreet"
-              maxLength={160}
-              defaultValue={value && 'billingAddress' in value ? value.billingAddress?.street : ''}
-            />
-          </label>
-          <label>
-            Número exterior
-            <input
-              name="billingExteriorNumber"
-              maxLength={20}
+            Dirección completa
+            <textarea
+              name="addressFull"
+              maxLength={500}
+              placeholder="Incluye calle, número, colonia, municipio o alcaldía y estado."
               defaultValue={
-                value && 'billingAddress' in value ? value.billingAddress?.exteriorNumber : ''
+                value && 'addressFull' in value ? value.addressFull : legacyAddress(value)
               }
-            />
-          </label>
-          <label>
-            Número interior
-            <input
-              name="billingInteriorNumber"
-              maxLength={20}
-              defaultValue={
-                value && 'billingAddress' in value ? value.billingAddress?.interiorNumber : ''
-              }
-            />
-          </label>
-          <label>
-            Colonia
-            <input
-              name="billingNeighborhood"
-              maxLength={120}
-              defaultValue={
-                value && 'billingAddress' in value ? value.billingAddress?.neighborhood : ''
-              }
-            />
-          </label>
-          <label>
-            Ciudad
-            <input
-              name="billingCity"
-              maxLength={100}
-              defaultValue={value && 'billingAddress' in value ? value.billingAddress?.city : ''}
-            />
-          </label>
-          <label>
-            Estado
-            <input
-              name="billingState"
-              maxLength={100}
-              defaultValue={value && 'billingAddress' in value ? value.billingAddress?.state : ''}
             />
           </label>
           <label>
             Código postal
             <input
-              name="billingPostalCode"
-              maxLength={10}
+              name="postalCode"
+              inputMode="numeric"
+              pattern="\\d{5}"
+              maxLength={5}
               defaultValue={
-                value && 'billingAddress' in value ? value.billingAddress?.postalCode : ''
+                value && 'postalCode' in value
+                  ? value.postalCode
+                  : value && 'billingAddress' in value
+                    ? value.billingAddress?.postalCode
+                    : ''
               }
             />
           </label>
@@ -804,7 +772,8 @@ function value(form: FormData, key: string): string {
 
 function parseForm(kind: EntityKind, form: FormData): ClientInput | SiteInput | EquipmentInput {
   if (kind === 'clients') {
-    const billingStreet = value(form, 'billingStreet');
+    const addressFull = value(form, 'addressFull');
+    const postalCode = value(form, 'postalCode');
     return clientInputSchema.parse({
       name: value(form, 'name'),
       legalName: value(form, 'legalName'),
@@ -814,20 +783,8 @@ function parseForm(kind: EntityKind, form: FormData): ClientInput | SiteInput | 
       phone: value(form, 'phone'),
       status: value(form, 'status'),
       notes: value(form, 'notes'),
-      ...(billingStreet
-        ? {
-            billingAddress: {
-              street: billingStreet,
-              exteriorNumber: value(form, 'billingExteriorNumber'),
-              interiorNumber: value(form, 'billingInteriorNumber'),
-              neighborhood: value(form, 'billingNeighborhood'),
-              city: value(form, 'billingCity'),
-              state: value(form, 'billingState'),
-              postalCode: value(form, 'billingPostalCode'),
-              country: 'México',
-            },
-          }
-        : {}),
+      ...(addressFull ? {addressFull} : {}),
+      ...(postalCode ? {postalCode} : {}),
     });
   }
   if (kind === 'sites') {
@@ -868,6 +825,37 @@ function parseForm(kind: EntityKind, form: FormData): ClientInput | SiteInput | 
     latestDiagnosis: value(form, 'latestDiagnosis'),
     status: value(form, 'status'),
   });
+}
+
+function formatFormError(error: unknown): string {
+  if (error && typeof error === 'object' && 'issues' in error) {
+    const issues = (error as {issues?: Array<{path?: Array<string | number>; message?: string}>})
+      .issues;
+    const path = issues?.[0]?.path?.[0];
+    if (path === 'addressFull') return 'Escribe la dirección completa.';
+    if (path === 'postalCode') return 'El código postal debe contener cinco dígitos.';
+    if (path === 'email') return 'Escribe un correo electrónico válido.';
+    if (path === 'name') return 'Escribe un nombre válido.';
+  }
+  return 'No se pudo guardar el registro. Revisa los datos e inténtalo de nuevo.';
+}
+
+function statusLabel(status: string): string {
+  return {active: 'Activo', inactive: 'Inactivo', retired: 'Retirado'}[status] ?? status;
+}
+
+function legacyAddress(value: MasterRecord | null): string {
+  if (!value || !('billingAddress' in value) || !value.billingAddress) return '';
+  return [
+    value.billingAddress.street,
+    value.billingAddress.exteriorNumber,
+    value.billingAddress.interiorNumber,
+    value.billingAddress.neighborhood,
+    value.billingAddress.city,
+    value.billingAddress.state,
+  ]
+    .filter(Boolean)
+    .join(', ');
 }
 
 function numberOrNull(form: FormData, key: string): number | null {

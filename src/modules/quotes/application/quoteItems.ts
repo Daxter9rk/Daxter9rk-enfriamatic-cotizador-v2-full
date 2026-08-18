@@ -18,7 +18,7 @@ export function snapshotCatalogItem(item: CatalogItem): CatalogItemSnapshot {
 
 export function createQuoteItemFromCatalog(item: CatalogItem, position: number): QuoteItemInput {
   if (item.status !== 'active') {
-    throw new Error('El artÃ­culo estÃ¡ inactivo y no puede agregarse a una cotizaciÃ³n nueva.');
+    throw new Error('El artículo está inactivo y no puede agregarse a una cotización nueva.');
   }
   return {
     position,

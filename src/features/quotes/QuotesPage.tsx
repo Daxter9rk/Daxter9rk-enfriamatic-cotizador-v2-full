@@ -425,7 +425,7 @@ export function QuotesPage() {
               <input name="serviceReference" maxLength={500} />
             </label>
             <label>
-              Contexto tÃ©cnico (opcional)
+              Contexto técnico (opcional)
               <textarea name="technicalContext" maxLength={2000} />
             </label>
             {profile?.role === 'admin' && (

@@ -61,6 +61,8 @@ export interface Client extends AuditFields {
   email?: string;
   phone?: string;
   billingAddress?: Address;
+  addressFull?: string;
+  postalCode?: string;
   status: 'active' | 'inactive';
   notes?: string;
 }
