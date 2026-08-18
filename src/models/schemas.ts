@@ -15,6 +15,8 @@ export const clientInputSchema = z.object({
   phone: z.string().trim().max(30).optional(),
   status: z.enum(['active', 'inactive']),
   notes: optionalText,
+  addressFull: z.string().trim().max(500).optional(),
+  postalCode: z.union([z.string().regex(/^\d{5}$/), z.literal('')]).optional(),
   billingAddress: z
     .object({
       street: z.string().trim().min(1).max(160),

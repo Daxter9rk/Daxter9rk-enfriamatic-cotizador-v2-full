@@ -130,31 +130,35 @@ export async function generateQuotePdf(
     .fillColor('#647680')
     .text([input.clientLegalName, input.clientRfc].filter(Boolean).join(' · '), 58, 164)
     .fillColor('#02557B')
-    .text('INSTALACIÓN / EQUIPO', 310, 132)
+    .text(
+      input.operationalMode === 'independent'
+        ? 'REFERENCIA DEL SERVICIO / CONTEXTO TÉCNICO'
+        : 'INSTALACIÓN / EQUIPO',
+      310,
+      132,
+      {width: 240},
+    )
     .fillColor('#17242B')
     .fontSize(10)
-    .text(input.siteName || input.equipmentName || input.serviceReference || '', 310, 146)
+    .text(
+      input.operationalMode === 'independent'
+        ? input.serviceReference || 'Sin referencia'
+        : input.siteName || input.equipmentName || input.serviceReference || '',
+      310,
+      146,
+    )
     .fontSize(8)
     .fillColor('#647680')
-    .text([input.siteAddress, input.equipmentName].filter(Boolean).join(' · '), 310, 163, {
-      width: 240,
-    });
-
-  if (input.operationalMode === 'independent') {
-    document
-      .fillColor('#F4F7F9')
-      .rect(300, 125, 260, 55)
-      .fill()
-      .fillColor('#02557B')
-      .fontSize(8)
-      .text('CONTEXTO OPERATIVO', 310, 132)
-      .fillColor('#17242B')
-      .fontSize(9)
-      .text(input.serviceReference || '', 310, 146)
-      .fillColor('#647680')
-      .fontSize(8)
-      .text(input.technicalContext || '', 310, 160, {width: 240});
-  }
+    .text(
+      input.operationalMode === 'independent'
+        ? input.technicalContext || ''
+        : [input.siteAddress, input.equipmentName].filter(Boolean).join(' · '),
+      310,
+      163,
+      {
+        width: 240,
+      },
+    );
 
   drawTableHeader(document, 220);
   let tableY = document.y;

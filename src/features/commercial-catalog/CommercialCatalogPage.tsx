@@ -89,7 +89,8 @@ export function CommercialCatalogPage() {
         brand: String(form.get('brand') || '') || null,
         model: String(form.get('model') || '') || null,
         basePrice: Number(form.get('basePrice')),
-        taxable: form.get('taxable') === 'on',
+        // Kept only for historical schema compatibility; IVA is global.
+        taxable: true,
         status: form.get('status'),
         searchTokens: buildSearchTokens(
           code,
@@ -263,7 +264,7 @@ export function CommercialCatalogPage() {
               </dl>
               <footer>
                 <strong>{formatCurrency(item.basePrice)}</strong>
-                <span>{item.taxable ? 'Más IVA' : 'No gravado'}</span>
+                <span>Precio antes de IVA</span>
               </footer>
               {profile?.role === 'admin' && (
                 <div className="button-row">
@@ -401,10 +402,6 @@ function CatalogEditor({
             <option value="active">Activo</option>
             <option value="inactive">Inactivo</option>
           </select>
-        </label>
-        <label className="checkbox field-wide">
-          <input name="taxable" type="checkbox" defaultChecked={current?.taxable ?? true} /> Aplica
-          IVA del documento
         </label>
         {message && <p className="form-message form-message--error field-wide">{message}</p>}
         <button className="button button--primary field-wide" disabled={busy}>

@@ -124,7 +124,7 @@ export function QuoteEditor({
         originalUnitPrice: Number(form.get('originalUnitPrice')),
         discountType: form.get('discountType'),
         discountValue: Number(form.get('discountValue')),
-        taxable: form.get('taxable') === 'on',
+        taxable: true,
         ...(editingItem?.catalogItemId
           ? {
               catalogItemId: editingItem.catalogItemId,
@@ -208,7 +208,7 @@ export function QuoteEditor({
         {id: profileId, role: profileRole},
       );
       await onChanged();
-      setMessage('Datos de la cotizaciÃ³n guardados.');
+      setMessage('Datos de la cotización guardados.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudieron guardar los datos.');
     } finally {
@@ -286,14 +286,17 @@ export function QuoteEditor({
               <span>Cliente</span>
               <strong>{client?.name ?? quote.clientId}</strong>
             </div>
-            <div>
-              <span>Instalación</span>
-              {quote.siteId ? (
+            {quote.requestId ? (
+              <div>
+                <span>Instalación</span>
                 <strong>{site?.name ?? quote.siteId}</strong>
-              ) : (
-                <strong>Sin instalaciÃ³n vinculada</strong>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div>
+                <span>Contexto del servicio</span>
+                <strong>{quote.serviceReference || 'Sin referencia'}</strong>
+              </div>
+            )}
             <div>
               <span>Estado</span>
               <strong>{quoteStatusLabel(quote.status)}</strong>
@@ -329,7 +332,7 @@ export function QuoteEditor({
                     />
                   </label>
                   <label>
-                    Contexto tÃ©cnico
+                    Contexto técnico
                     <textarea
                       name="technicalContext"
                       value={technicalContext}
@@ -342,7 +345,7 @@ export function QuoteEditor({
                     <textarea name="notes" defaultValue={quote.notes ?? ''} maxLength={4000} />
                   </label>
                   <button className="button button--secondary field-wide" disabled={busy}>
-                    Guardar datos de cotizaciÃ³n
+                    Guardar datos de cotización
                   </button>
                 </form>
               )}
@@ -574,9 +577,6 @@ function ItemForm({
           defaultValue={item?.discountValue ?? 0}
         />
       </label>
-      <label className="checkbox">
-        <input name="taxable" type="checkbox" defaultChecked={item?.taxable ?? true} /> Aplica IVA
-      </label>
       <button className="button button--secondary field-wide" disabled={busy}>
         {item ? 'Guardar cambios de partida' : 'Agregar partida manual'}
       </button>
@@ -605,7 +605,7 @@ function Totals({quote, totals}: {quote: Quote; totals: ReturnType<typeof calcul
         <strong>{formatCurrency(totals.subtotalFinal)}</strong>
       </div>
       <div>
-        <span>IVA {quote.taxRate * 100}%</span>
+        <span>IVA global ({quote.taxRate * 100}%)</span>
         <strong>{formatCurrency(totals.taxTotal)}</strong>
       </div>
       <div className="totals-card__grand">
@@ -789,7 +789,19 @@ function Preview({
 }) {
   const pages = chunkQuoteItems(items, 10);
   return (
-    <div className="preview-overlay">
+    <div
+      className="preview-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Vista previa"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+        }
+      }}
+    >
       <button className="icon-button" aria-label="Cerrar vista previa" onClick={onClose}>
         ×
       </button>

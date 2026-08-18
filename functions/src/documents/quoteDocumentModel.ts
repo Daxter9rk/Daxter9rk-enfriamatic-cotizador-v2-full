@@ -8,6 +8,8 @@ export interface QuoteClientSnapshot {
   contactName: string | null;
   email: string | null;
   phone: string | null;
+  addressFull: string | null;
+  postalCode: string | null;
   billingAddress: Record<string, string> | null;
 }
 
@@ -140,6 +142,8 @@ export function buildQuoteDocumentModel(input: {
       contactName: text(input.client.contactName),
       email: text(input.client.email),
       phone: text(input.client.phone),
+      addressFull: text(input.client.addressFull),
+      postalCode: text(input.client.postalCode),
       billingAddress: addressSnapshot(input.client.billingAddress),
     },
     company: {
