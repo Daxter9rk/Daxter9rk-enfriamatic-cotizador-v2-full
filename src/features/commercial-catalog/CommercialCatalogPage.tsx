@@ -458,6 +458,12 @@ function CatalogImage({
     [],
   );
 
+  const [imagePresent, setImagePresent] = useState(hasImage);
+
+  useEffect(() => {
+    setImagePresent(hasImage);
+  }, [hasImage, item.id]);
+
   const replaceObjectUrl = (blob: Blob | null) => {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
     objectUrlRef.current = blob ? URL.createObjectURL(blob) : null;
@@ -470,7 +476,10 @@ function CatalogImage({
     setMessage(null);
     try {
       const result = await upsertCatalogImage(item.id, file);
+
       replaceObjectUrl(file);
+      setImagePresent(true);
+
       await onChanged();
       if (result.cleanupPending) {
         setMessage('La imagen se guardó; la limpieza anterior se reintentará de forma segura.');
@@ -496,7 +505,10 @@ function CatalogImage({
     setMessage(null);
     try {
       const result = await deleteCatalogImage(item.id);
+
       replaceObjectUrl(null);
+      setImagePresent(false);
+
       await onChanged();
       if (result.cleanupPending) {
         setMessage('La referencia fue retirada; la limpieza física queda pendiente de reintento.');
@@ -539,9 +551,9 @@ function CatalogImage({
             disabled={busy}
             onClick={() => inputRef.current?.click()}
           >
-            {busy ? 'Procesando…' : hasImage ? 'Cambiar imagen' : 'Agregar imagen'}
+            {busy ? 'Procesando…' : imagePresent ? 'Cambiar imagen' : 'Agregar imagen'}
           </button>
-          {hasImage && (
+          {imagePresent && (
             <button
               type="button"
               className="button button--danger"
