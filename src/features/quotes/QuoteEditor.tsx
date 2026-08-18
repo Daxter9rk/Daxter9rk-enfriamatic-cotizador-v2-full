@@ -81,6 +81,7 @@ export function QuoteEditor({
   const [technicalContext, setTechnicalContext] = useState(quote.technicalContext ?? '');
   const [preview, setPreview] = useState(false);
   const previewTriggerRef = useRef<HTMLButtonElement>(null);
+  const panelTriggerRef = useRef<HTMLButtonElement>(null);
   const [editingItem, setEditingItem] = useState<QuoteItem | null>(null);
   const [manualItemOpen, setManualItemOpen] = useState(false);
   const [globalDiscountType, setGlobalDiscountType] = useState(
@@ -91,6 +92,14 @@ export function QuoteEditor({
   const [catalogSearch, setCatalogSearch] = useState('');
   const [catalogType, setCatalogType] = useState<'all' | 'product' | 'service'>('all');
   const [transitionTarget, setTransitionTarget] = useState<QuoteStatus | null>(null);
+  const restorePanelFocus = () => {
+    requestAnimationFrame(() => {
+      const trigger = panelTriggerRef.current?.isConnected
+        ? panelTriggerRef.current
+        : document.querySelector<HTMLButtonElement>('[data-testid="manual-item-trigger"]');
+      trigger?.focus();
+    });
+  };
   const baseTotals = useMemo(
     () =>
       quote.locked || quote.status !== 'draft'
@@ -370,7 +379,7 @@ export function QuoteEditor({
 
   return (
     <Modal title={quote.folio || 'Editor de cotización'} onClose={onClose}>
-      <div className="quote-editor-layout">
+      <div className="quote-editor-layout" data-testid={`quote-editor-${quote.id}`}>
         <div className="quote-editor">
           <header className="quote-summary">
             <div>
@@ -417,6 +426,7 @@ export function QuoteEditor({
                     Referencia de servicio
                     <input
                       name="serviceReference"
+                      className="quote-service-reference"
                       value={serviceReference}
                       maxLength={500}
                       onChange={(event) => setServiceReference(event.target.value)}
@@ -468,8 +478,9 @@ export function QuoteEditor({
                         }}
                       />
                     </label>
-                    <label className="checkbox-field">
+                    <label className="tax-switch">
                       <input
+                        role="switch"
                         type="checkbox"
                         checked={applyTax}
                         onChange={(event) => {
@@ -478,7 +489,7 @@ export function QuoteEditor({
                           void persistTotals({applyTax: value});
                         }}
                       />
-                      Aplicar IVA {quote.taxRate ? `${quote.taxRate * 100} %` : '16 %'}
+                      <span>Aplicar IVA {quote.taxRate ? `${quote.taxRate * 100} %` : '16 %'}</span>
                     </label>
                     <small>Descuento calculado: {formatCurrency(totals.globalDiscountAmount ?? 0)}</small>
                     {globalDiscountError && (
@@ -498,9 +509,9 @@ export function QuoteEditor({
               {quote.locked && (
                 <fieldset className="field-wide quote-calculation-settings">
                   <legend>Configuración fiscal</legend>
-                  <label className="checkbox-field">
-                    <input type="checkbox" checked={applyTax} disabled readOnly />
-                    Aplicar IVA {quote.taxRate ? `${quote.taxRate * 100} %` : '16 %'}
+                  <label className="tax-switch">
+                    <input role="switch" type="checkbox" checked={applyTax} disabled readOnly />
+                    <span>Aplicar IVA {quote.taxRate ? `${quote.taxRate * 100} %` : '16 %'}</span>
                   </label>
                 </fieldset>
               )}
@@ -523,7 +534,10 @@ export function QuoteEditor({
                           <button
                             className="text-button"
                             disabled={busy}
-                            onClick={() => setEditingItem(item)}
+                            onClick={(event) => {
+                              panelTriggerRef.current = event.currentTarget;
+                              setEditingItem(item);
+                            }}
                           >
                             Editar
                           </button>
@@ -550,12 +564,15 @@ export function QuoteEditor({
                   onCancel={() => {
                     setEditingItem(null);
                     setManualItemOpen(false);
+                    restorePanelFocus();
                   }}
                 />
               ) : !quote.locked ? (
                 <button
                   type="button"
                   className="button button--secondary"
+                  ref={panelTriggerRef}
+                  data-testid="manual-item-trigger"
                   onClick={() => setManualItemOpen(true)}
                 >
                   Agregar partida manual
@@ -739,14 +756,14 @@ function ItemForm({
           defaultValue={item?.discountValue ?? 0}
         />
       </label>
-      <button className="button button--secondary field-wide" disabled={busy}>
-        {item ? 'Guardar cambios de partida' : 'Agregar partida manual'}
-      </button>
-      {item && (
-        <button type="button" className="button button--ghost field-wide" onClick={onCancel}>
-          Cancelar edición
+      <div className="button-row field-wide quote-item-form__actions">
+        <button type="button" className="button button--ghost" onClick={onCancel} disabled={busy}>
+          Cancelar
         </button>
-      )}
+        <button className="button button--secondary" disabled={busy}>
+          {item ? 'Guardar cambios' : 'Agregar partida'}
+        </button>
+      </div>
     </form>
   );
 }

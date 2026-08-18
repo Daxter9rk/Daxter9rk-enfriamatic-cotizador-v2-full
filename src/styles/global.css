@@ -1430,6 +1430,64 @@ th {
   padding: 1rem;
   background: var(--background);
 }
+.quote-service-reference {
+  min-height: 2.5rem;
+}
+.tax-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.5rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+.tax-switch input {
+  appearance: none;
+  position: relative;
+  width: 2.9rem;
+  height: 1.65rem;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 2px solid var(--muted);
+  border-radius: 999px;
+  background: var(--line);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.tax-switch input::after {
+  content: '';
+  position: absolute;
+  top: 0.18rem;
+  left: 0.18rem;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
+  transition: transform 120ms ease;
+}
+.tax-switch input:checked {
+  border-color: var(--accent, #0f766e);
+  background: var(--accent, #0f766e);
+}
+.tax-switch input:checked::after {
+  transform: translateX(1.2rem);
+}
+.tax-switch input:focus-visible {
+  outline: 3px solid var(--focus, #1d4ed8);
+  outline-offset: 3px;
+}
+.tax-switch input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.tax-switch:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+.quote-item-form__actions {
+  justify-content: flex-start;
+}
 .totals-card {
   display: grid;
   gap: 0.5rem;

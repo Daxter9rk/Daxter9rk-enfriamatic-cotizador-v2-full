@@ -269,3 +269,77 @@ test('operator creates an independent quote assigned to self and cannot reassign
 
   await expect(operatorPreviewDialog).toContainText('Procesos Fríos del Bajío');
 });
+
+test('admin validates the quote editor phase two interactions', async ({page}) => {
+  await login(page, credentials.admin);
+  await openIndependentQuote(page);
+  await page.getByRole('button', {name: 'Crear cotización'}).click();
+
+  const catalogAddButton = page.locator('.quote-catalog button[aria-label^="Agregar "]').first();
+  await expect(catalogAddButton).toBeVisible();
+  await catalogAddButton.click();
+
+  const manualOpenButton = page.getByRole('button', {name: 'Agregar partida manual'});
+  await manualOpenButton.click();
+  await page.getByTestId('quote-item-description').fill('Partida cancelada');
+  await page.getByRole('button', {name: 'Cancelar', exact: true}).click();
+  await expect(page.getByText('Partida cancelada')).toHaveCount(0);
+  await expect(manualOpenButton).toBeFocused();
+
+  await manualOpenButton.click();
+  await page.getByTestId('quote-item-description').fill('Partida manual');
+  await page.getByTestId('quote-item-price').fill('1000');
+  await page.getByRole('button', {name: 'Agregar partida', exact: true}).click();
+  await expect(page.locator('.quote-items article').filter({hasText: 'Partida manual'})).toBeVisible();
+
+  const manualRow = page.locator('.quote-items article').filter({hasText: 'Partida manual'});
+  await manualRow.getByRole('button', {name: 'Editar'}).click();
+  await page.getByTestId('quote-item-description').fill('Cambio cancelado');
+  await page.getByRole('button', {name: 'Cancelar', exact: true}).click();
+  await expect(page.locator('.quote-items article').filter({hasText: 'Partida manual'})).toBeVisible();
+  await expect(page.getByText('Cambio cancelado')).toHaveCount(0);
+
+  await page
+    .locator('.quote-items article')
+    .filter({hasText: 'Partida manual'})
+    .getByRole('button', {name: 'Editar'})
+    .click();
+  await page.getByTestId('quote-item-description').fill('Partida guardada');
+  await page.getByRole('button', {name: 'Guardar cambios', exact: true}).click();
+  await expect(page.getByText('Partida guardada')).toBeVisible();
+
+  const discountType = page.getByRole('combobox', {name: 'Tipo de descuento global'});
+  const discountValue = page.getByRole('spinbutton', {name: 'Valor del descuento global'});
+  await discountType.selectOption('percentage');
+  await discountValue.fill('10');
+  await expect(page.getByText('Descuento global', {exact: true})).toBeVisible();
+  const percentageTotal = await page.locator('.totals-card__grand strong').textContent();
+
+  await page.getByRole('button', {name: 'Guardar datos de cotización'}).click();
+  await expect(page.getByText('Datos de la cotización guardados.')).toBeVisible();
+  const quoteEditorId = await page
+    .locator('[data-testid^="quote-editor-"]')
+    .getAttribute('data-testid');
+  if (!quoteEditorId) throw new Error('No se encontró el editor de la cotización.');
+  const quoteId = quoteEditorId.replace('quote-editor-', '');
+  await page.getByRole('dialog').getByRole('button', {name: 'Cerrar', exact: true}).click();
+  await page.getByTestId(`quote-${quoteId}`).click();
+  await expect(discountType).toHaveValue('percentage');
+  await expect(discountValue).toHaveValue('10');
+  await expect(page.locator('.totals-card__grand strong')).toHaveText(percentageTotal ?? '');
+
+  await page.getByRole('combobox', {name: 'Tipo de descuento global'}).selectOption('fixed');
+  await page.getByRole('spinbutton', {name: 'Valor del descuento global'}).fill('50');
+  await page.getByRole('switch', {name: 'Aplicar IVA 16 %'}).click();
+  await expect(page.getByText('IVA desactivado')).toBeVisible();
+  await expect(page.locator('.totals-card__grand strong')).not.toHaveText(percentageTotal ?? '');
+  await page.getByRole('switch', {name: 'Aplicar IVA 16 %'}).click();
+
+  const previewButton = page.getByRole('button', {name: 'Vista previa'});
+  await previewButton.click();
+  await expect(page.getByRole('dialog', {name: 'Vista previa'})).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', {name: 'Vista previa'})).toHaveCount(0);
+  await expect(page.getByTestId('issue-quote')).toBeVisible();
+  await expect(previewButton).toBeFocused();
+});
