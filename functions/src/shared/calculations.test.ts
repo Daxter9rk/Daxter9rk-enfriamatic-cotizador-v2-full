@@ -24,4 +24,21 @@ describe('server quote calculations', () => {
       grandTotal: 2320,
     });
   });
+
+  it('applies the global tax rate even when a historical item is non-taxable', () => {
+    expect(
+      calculateQuoteTotals(
+        [
+          {
+            quantity: 1,
+            originalUnitPrice: 100,
+            discountType: 'none',
+            discountValue: 0,
+            taxable: false,
+          },
+        ],
+        0.16,
+      ).taxTotal,
+    ).toBe(16);
+  });
 });

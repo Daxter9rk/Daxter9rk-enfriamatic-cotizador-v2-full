@@ -5,7 +5,6 @@ import {firestore} from '../shared/admin';
 import {requireActiveActor, type ActiveActor} from '../shared/auth';
 import {calculateItem, calculateQuoteTotals} from '../shared/calculations';
 import {invalidArgument} from '../shared/errors';
-import {formatFolio} from '../shared/folio';
 import {quoteIdSchema, quoteItemSchema} from '../shared/schemas';
 import {getNextRevision, getRootQuoteId, isIndependentQuote} from './correctionPolicy';
 
@@ -148,25 +147,19 @@ async function createIndependentCorrection(
       originalUnitPrice: item.originalUnitPrice,
       discountType: 'fixed' as const,
       discountValue: item.discountAmount,
-      taxable: item.taxable,
+      taxable: true,
     })),
     taxRate,
   );
-  const {folio, counterRef, counterValue} = await reserveFolio(transaction, actor.uid);
   const correctionQuoteRef = firestore.collection('quotes').doc();
   const now = FieldValue.serverTimestamp();
-  transaction.set(
-    counterRef,
-    {value: counterValue, year: new Date().getUTCFullYear(), updatedAt: now, updatedBy: actor.uid},
-    {merge: true},
-  );
   transaction.set(
     sequenceRef,
     {rootQuoteId, nextRevision: nextRevision + 1, updatedAt: now, updatedBy: actor.uid},
     {merge: true},
   );
   transaction.set(correctionQuoteRef, {
-    folio,
+    folio: '',
     requestId: null,
     assignedTo: originalQuote.assignedTo ?? (actor.role === 'operator' ? actor.uid : null),
     clientId: originalQuote.clientId,
@@ -207,7 +200,7 @@ async function createIndependentCorrection(
     sourceEventId,
     originalQuoteId,
     correctionQuoteRef.id,
-    folio,
+    '',
     nextRevision,
     actor,
   );
@@ -216,7 +209,7 @@ async function createIndependentCorrection(
     status: 'created',
     quoteId: correctionQuoteRef.id,
     requestId: null,
-    folio,
+    folio: '',
     revisionNumber: nextRevision,
     createdAt: now,
     createdBy: actor.uid,
@@ -224,7 +217,7 @@ async function createIndependentCorrection(
   return {
     quoteId: correctionQuoteRef.id,
     requestId: null,
-    folio,
+    folio: '',
     revisionNumber: nextRevision,
     idempotent: false,
   };
@@ -262,53 +255,42 @@ async function createHistoricalCorrection(
       'The original quote is not assigned to this operator.',
     );
   }
-  const {folio, counterRef, counterValue} = await reserveFolio(transaction, actor.uid);
-  const correctionRequestRef = firestore.collection('requests').doc();
+  const itemSnapshot = await transaction.get(
+    firestore.collection(`quotes/${originalQuoteId}/items`).orderBy('position').limit(100),
+  );
+  if (itemSnapshot.empty) {
+    throw new HttpsError('failed-precondition', 'At least one quote item is required.');
+  }
+  const copiedItems = itemSnapshot.docs.map((item) => copyItem(item.data()));
+  const taxRate = Number(originalQuote.taxRate ?? 0.16);
+  const totals = calculateQuoteTotals(
+    copiedItems.map((item) => ({
+      quantity: item.quantity,
+      originalUnitPrice: item.originalUnitPrice,
+      discountType: 'fixed' as const,
+      discountValue: item.discountAmount,
+      taxable: true,
+    })),
+    taxRate,
+  );
   const correctionQuoteRef = firestore.collection('quotes').doc();
   const now = FieldValue.serverTimestamp();
-  transaction.set(
-    counterRef,
-    {value: counterValue, year: new Date().getUTCFullYear(), updatedAt: now, updatedBy: actor.uid},
-    {merge: true},
-  );
-  transaction.set(correctionRequestRef, {
-    clientId: originalRequest.clientId,
-    siteId: originalRequest.siteId,
-    equipmentId: originalRequest.equipmentId ?? null,
-    scope: originalRequest.equipmentId ? 'equipment' : 'site',
-    title: `Corrección de ${String(originalQuote.folio)}`,
-    description: `Solicitud de corrección relacionada con ${String(originalQuote.folio)}.`,
-    priority: originalRequest.priority ?? 'normal',
-    status: originalRequest.assignedTo ? 'assigned' : 'pending',
-    assignedTo: originalRequest.assignedTo ?? null,
-    assignedAt: originalRequest.assignedTo ? now : null,
-    completedAt: null,
-    correctionOfRequestId: originalRequestRef.id,
-    correctionOfQuoteId: originalQuoteId,
-    createdAt: now,
-    createdBy: actor.uid,
-    updatedAt: now,
-    updatedBy: actor.uid,
-    schemaVersion: 1,
-  });
   transaction.set(correctionQuoteRef, {
-    folio,
-    requestId: correctionRequestRef.id,
-    assignedTo: originalRequest.assignedTo ?? null,
+    folio: '',
+    requestId: null,
+    assignedTo: originalQuote.assignedTo ?? (actor.role === 'operator' ? actor.uid : null),
     clientId: originalQuote.clientId,
-    siteId: originalQuote.siteId,
-    equipmentId: originalQuote.equipmentId ?? null,
+    siteId: null,
+    equipmentId: null,
+    serviceReference: normalizeText(originalQuote.serviceReference),
+    technicalContext: normalizeText(originalQuote.technicalContext),
     status: 'draft',
     documentStatus: 'not_generated',
     currency: 'MXN',
-    taxRate: originalQuote.taxRate ?? 0.16,
+    taxRate,
     discountDisplayMode: originalQuote.discountDisplayMode ?? 'detailed',
-    subtotalOriginal: 0,
-    discountTotal: 0,
-    subtotalFinal: 0,
-    taxTotal: 0,
-    grandTotal: 0,
-    notes: '',
+    ...totals,
+    notes: normalizeText(originalQuote.notes),
     validityDays: originalQuote.validityDays ?? 15,
     validUntil: null,
     issuedAt: null,
@@ -322,12 +304,19 @@ async function createHistoricalCorrection(
     updatedBy: actor.uid,
     schemaVersion: 1,
   });
+  for (const item of copiedItems) {
+    transaction.set(correctionQuoteRef.collection('items').doc(), {
+      ...item,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
   transaction.set(attemptRef, {
     idempotencyKey,
     status: 'created',
     quoteId: correctionQuoteRef.id,
-    requestId: correctionRequestRef.id,
-    folio,
+    requestId: null,
+    folio: '',
     revisionNumber: Number(originalQuote.revisionNumber ?? 1) + 1,
     createdAt: now,
     createdBy: actor.uid,
@@ -338,34 +327,20 @@ async function createHistoricalCorrection(
     action: 'quote.correction_created',
     resourceType: 'quote',
     resourceId: correctionQuoteRef.id,
-    requestId: correctionRequestRef.id,
+    requestId: null,
     quoteId: correctionQuoteRef.id,
     before: {originalQuoteId},
-    after: {folio, revisionNumber: Number(originalQuote.revisionNumber ?? 1) + 1},
+    after: {folio: '', revisionNumber: Number(originalQuote.revisionNumber ?? 1) + 1},
     metadata: {idempotencyKey},
     createdAt: now,
   });
   return {
-    requestId: correctionRequestRef.id,
+    requestId: null,
     quoteId: correctionQuoteRef.id,
-    folio,
+    folio: '',
     revisionNumber: Number(originalQuote.revisionNumber ?? 1) + 1,
     idempotent: false,
   };
-}
-
-async function reserveFolio(transaction: FirebaseFirestore.Transaction, actorId: string) {
-  const year = new Date().getUTCFullYear();
-  const defaultsSnapshot = await transaction.get(firestore.doc('settings/quoteDefaults'));
-  const prefixValue = defaultsSnapshot.data()?.folioPrefix;
-  const prefix =
-    typeof prefixValue === 'string' && /^[A-Z0-9-]{1,12}$/.test(prefixValue) ? prefixValue : 'COT';
-  const counterRef = firestore.doc(`counters/quotes-${year}`);
-  const counterSnapshot = await transaction.get(counterRef);
-  const counterValue = Number(counterSnapshot.data()?.value ?? 0) + 1;
-  if (!Number.isSafeInteger(counterValue) || counterValue > 999999)
-    throw new HttpsError('resource-exhausted', 'The annual folio counter is exhausted.');
-  return {folio: formatFolio(prefix, year, counterValue), counterRef, counterValue, actorId};
 }
 
 function copyItem(item: Record<string, any>) {

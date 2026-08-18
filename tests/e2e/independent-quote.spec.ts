@@ -107,6 +107,14 @@ test('admin creates, edits, previews and reloads an independent quote', async ({
   await expect(page.locator('textarea[name="technicalContext"]')).toHaveValue(
     'Contexto técnico capturado como texto.',
   );
+  await expect(
+    page.getByRole('dialog').getByRole('heading', {name: 'Editor de cotización'}),
+  ).toBeVisible();
+  await page.getByRole('button', {name: 'Editar'}).first().click();
+  await page.getByTestId('quote-item-price').fill('11000');
+  await page.getByRole('button', {name: 'Guardar cambios de partida'}).click();
+  await page.getByTestId('issue-quote').click();
+  await expect(page.getByRole('dialog').getByText('Emitida', {exact: true}).first()).toBeVisible();
   const correctedFolio =
     (await page
       .getByRole('dialog')
@@ -114,11 +122,6 @@ test('admin creates, edits, previews and reloads an independent quote', async ({
       .textContent()) ?? '';
   expect(correctedFolio).toMatch(/^COT-\d{4}-\d{6}$/);
   expect(correctedFolio).not.toBe(originalFolio);
-  await page.getByRole('button', {name: 'Editar'}).first().click();
-  await page.getByTestId('quote-item-price').fill('11000');
-  await page.getByRole('button', {name: 'Guardar cambios de partida'}).click();
-  await page.getByTestId('issue-quote').click();
-  await expect(page.getByRole('dialog').getByText('Emitida', {exact: true}).first()).toBeVisible();
   const correctedDownload = page.waitForEvent('download');
   await page.getByRole('button', {name: 'Descargar PDF'}).click();
   expect((await correctedDownload).suggestedFilename()).toBe(`${correctedFolio}.pdf`);

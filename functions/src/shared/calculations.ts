@@ -62,7 +62,8 @@ export function calculateQuoteTotals(items: CalculableItem[], taxRate: number): 
     (totals, item) => {
       const calculated = calculateItem(item);
       const original = roundMoney(item.quantity * item.originalUnitPrice);
-      const tax = item.taxable ? roundMoney(calculated.lineSubtotal * taxRate) : 0;
+      // Historical `taxable` values do not control new quote calculations.
+      const tax = roundMoney(calculated.lineSubtotal * taxRate);
       return {
         subtotalOriginal: roundMoney(totals.subtotalOriginal + original),
         discountTotal: roundMoney(totals.discountTotal + calculated.discountAmount),

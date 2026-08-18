@@ -30,8 +30,8 @@ describe('quote calculations', () => {
       subtotalOriginal: 2500,
       discountTotal: 300,
       subtotalFinal: 2200,
-      taxTotal: 288,
-      grandTotal: 2488,
+      taxTotal: 352,
+      grandTotal: 2552,
     });
   });
 
