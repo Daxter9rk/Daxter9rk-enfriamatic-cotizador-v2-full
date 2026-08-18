@@ -21,6 +21,22 @@ export function buildDevSeed(adminId: string, operatorId: string): SeedSpec[] {
   const operatorIds = [operatorId];
   const specs: SeedSpec[] = [
     {
+      path: 'clients/demo_client_dev',
+      data: marked({
+        name: 'Cliente de pruebas — DEV',
+        legalName: 'Cliente de pruebas — DEV, S.A. de C.V.',
+        rfc: 'XAXX010101000',
+        contactName: 'Persona de pruebas DEV',
+        email: 'cliente.dev@example.test',
+        phone: '5500000099',
+        addressFull: 'Dirección ficticia para pruebas DEV, Querétaro, México',
+        postalCode: '76000',
+        status: 'active',
+        notes: 'Registro demostrativo exclusivo para Emulator Suite y Firebase DEV.',
+        operatorIds,
+      }),
+    },
+    {
       path: 'clients/demo_client_001',
       data: marked({
         name: 'Fríos del Centro Demo',
