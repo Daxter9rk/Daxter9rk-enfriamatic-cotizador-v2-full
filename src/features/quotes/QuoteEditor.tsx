@@ -1,5 +1,6 @@
 import {useEffect, useMemo, useRef, useState, type FormEvent} from 'react';
 import {Link} from 'wouter';
+import logoUrl from '../../assets/brand/enfriamatic-logo-transparent.png';
 import {Modal} from '../../components/Modal';
 import type {
   CatalogItem,
@@ -1018,7 +1019,7 @@ function Preview({
             <span className="quote-preview__watermark">DOCUMENTO DE PRUEBA DEV</span>
             <header className="quote-preview__header">
               <div>
-                <strong>ENFRIAMATIC</strong>
+                <img className="quote-preview__logo" src={logoUrl} alt="Enfriamatic" />
                 <small>Cotizador V2.1</small>
               </div>
               <div>
@@ -1071,7 +1072,14 @@ function Preview({
                   <span>
                     {item.quantity} {item.unit}
                   </span>
-                  <span>{item.description}</span>
+                  <span>
+                    {item.description}
+                    {(item.brand || item.model) && (
+                      <small className="quote-preview__item-snapshot">
+                        {[item.brand, item.model].filter(Boolean).join(' ')}
+                      </small>
+                    )}
+                  </span>
                   <span>{formatCurrency(item.finalUnitPrice)}</span>
                   <strong>{formatCurrency(item.lineSubtotal)}</strong>
                 </div>

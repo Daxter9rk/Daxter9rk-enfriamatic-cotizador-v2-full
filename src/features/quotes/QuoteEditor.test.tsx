@@ -173,4 +173,19 @@ describe('quote editor phase two interactions', () => {
       'rows',
     );
   });
+
+  it('keeps preview totals aligned with the editor tax presentation', async () => {
+    const user = userEvent.setup();
+    renderEditor();
+    await user.click(await screen.findByRole('button', {name: 'Vista previa'}));
+
+    const preview = screen.getByRole('dialog', {name: 'Vista previa'});
+    expect(preview).toHaveTextContent('Descuento global');
+    expect(preview).toHaveTextContent('IVA global (16%)');
+
+    await user.click(screen.getByRole('button', {name: 'Cerrar vista previa'}));
+    await user.click(screen.getByRole('switch', {name: 'Aplicar IVA 16 %'}));
+    await user.click(screen.getByRole('button', {name: 'Vista previa'}));
+    expect(screen.getByRole('dialog', {name: 'Vista previa'})).toHaveTextContent('IVA desactivado');
+  });
 });

@@ -1533,6 +1533,24 @@ th {
   border-bottom: 1px solid var(--line);
   padding: 0.7rem 0;
 }
+.quote-preview__logo {
+  display: block;
+  width: 150px;
+  height: auto;
+  max-height: 54px;
+  object-fit: contain;
+  object-position: left center;
+}
+.quote-preview__header > div:first-child {
+  display: grid;
+  gap: 0.3rem;
+  align-content: start;
+}
+.quote-preview__item-snapshot {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78em;
+}
 .quote-preview footer {
   margin-top: 2rem;
   border-top: 2px solid var(--ink);

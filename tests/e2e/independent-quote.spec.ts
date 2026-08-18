@@ -204,7 +204,7 @@ test('admin creates, edits, previews and reloads an independent quote', async ({
 
   await page
     .getByRole('button', {
-      name: 'Guardar cambios de partida',
+      name: 'Guardar cambios',
     })
     .click();
 
