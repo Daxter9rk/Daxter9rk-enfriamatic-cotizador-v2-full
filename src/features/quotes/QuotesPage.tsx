@@ -156,8 +156,6 @@ export function QuotesPage() {
         assignedTo,
         siteId: null,
         equipmentId: null,
-        serviceReference: String(form.get('serviceReference') ?? ''),
-        technicalContext: String(form.get('technicalContext') ?? ''),
       });
       const id = await createQuoteRecord({
         actorId: profile.uid,
@@ -167,8 +165,6 @@ export function QuotesPage() {
         assignedTo: draft.assignedTo,
         siteId: null,
         equipmentId: null,
-        serviceReference: draft.serviceReference ?? null,
-        technicalContext: draft.technicalContext ?? null,
       });
       setCreating(false);
       await quotes.reload();
@@ -413,21 +409,6 @@ export function QuotesPage() {
                 ))}
               </select>
             </label>
-            <section
-              className="field-wide quote-link-summary"
-              aria-label="Cotización independiente"
-            >
-              <strong>Cotización independiente</strong>
-              <span>Se guardará con contexto técnico y sin vínculos operativos históricos.</span>
-            </section>
-            <label>
-              Referencia de servicio (opcional)
-              <input name="serviceReference" maxLength={500} />
-            </label>
-            <label>
-              Contexto técnico (opcional)
-              <textarea name="technicalContext" maxLength={2000} />
-            </label>
             {profile?.role === 'admin' && (
               <label>
                 Operador asignado (opcional)
@@ -515,16 +496,6 @@ function QuoteCreationGuide() {
       </li>
       <li>
         <span>2</span>
-        <strong>Referencia de servicio</strong>
-        <small>Texto opcional para identificar el trabajo</small>
-      </li>
-      <li>
-        <span>3</span>
-        <strong>Contexto técnico</strong>
-        <small>Texto opcional para orientar la propuesta</small>
-      </li>
-      <li>
-        <span>4</span>
         <strong>Partidas</strong>
         <small>Se agregan después de guardar el borrador</small>
       </li>

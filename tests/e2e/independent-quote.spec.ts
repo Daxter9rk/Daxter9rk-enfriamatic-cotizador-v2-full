@@ -53,15 +53,15 @@ test('admin creates, edits, previews and reloads an independent quote', async ({
   await login(page, credentials.admin);
   await openIndependentQuote(page);
 
+  await page.locator('select[name="assignedTo"]').selectOption('seed-operator-active');
+
+  await page.getByRole('button', {name: 'Crear cotización'}).click();
+
   await page.locator('input[name="serviceReference"]').fill('Servicio preventivo independiente');
 
   await page
     .locator('textarea[name="technicalContext"]')
     .fill('Contexto técnico capturado como texto.');
-
-  await page.locator('select[name="assignedTo"]').selectOption('seed-operator-active');
-
-  await page.getByRole('button', {name: 'Crear cotización'}).click();
 
   await page.getByRole('button', {name: 'Agregar Compresor emulador'}).click();
 

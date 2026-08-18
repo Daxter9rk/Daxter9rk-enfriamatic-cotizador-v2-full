@@ -77,6 +77,7 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
   await page.getByRole('button', {name: 'Guardar cambios de partida'}).click();
   await expect(page.getByRole('button', {name: 'Agregar partida manual'})).toBeVisible();
 
+  await page.getByRole('button', {name: 'Agregar partida manual'}).click();
   await page.getByTestId('quote-item-description').fill('Diagnóstico técnico manual');
   await page.getByTestId('quote-item-price').fill('2500');
   await page.getByRole('combobox', {name: 'Descuento', exact: true}).selectOption('percentage');

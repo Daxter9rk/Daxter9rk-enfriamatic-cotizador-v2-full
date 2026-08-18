@@ -37,6 +37,8 @@ describe('QuotesPage independent creation', () => {
     expect(screen.queryByTestId('quote-request')).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox', {name: /Instalaci/})).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox', {name: /Equipo/})).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/Referencia de servicio/)).toBeVisible();
+    expect(screen.queryByLabelText(/Referencia de servicio/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Contexto técnico/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Crear cotización'})).toBeVisible();
   });
 });
