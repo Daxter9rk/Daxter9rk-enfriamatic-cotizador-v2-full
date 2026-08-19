@@ -1,20 +1,22 @@
-import {useEffect, useRef, type KeyboardEvent, type ReactNode} from 'react';
+import {useEffect, useRef, type KeyboardEvent, type ReactNode, type RefObject} from 'react';
 
 export function Modal({
   title,
   children,
   onClose,
+  initialFocusRef,
 }: {
   title: string;
   children: ReactNode;
   onClose(): void;
+  initialFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     previousFocus.current = document.activeElement as HTMLElement | null;
-    closeRef.current?.focus();
+    (initialFocusRef?.current ?? closeRef.current)?.focus();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const handleKey = (event: globalThis.KeyboardEvent) => {
@@ -29,7 +31,7 @@ export function Modal({
       document.body.style.overflow = previousOverflow;
       previousFocus.current?.focus();
     };
-  }, [onClose]);
+  }, [initialFocusRef, onClose]);
 
   const trapFocus = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== 'Tab') return;

@@ -62,6 +62,10 @@ export function QuotesPage() {
     `${profile?.uid ?? 'admin'}|${statusFilter}|${documentStatusFilter}|${assignmentFilter}|${quoteSearch}|${clientFilter}|${creatorFilter}|${fromDate}|${sort}`,
   );
   const clients = useCollection<Client>('clients', masterDataFilter);
+  const creationClients = useMemo(
+    () => clients.data.filter((client) => client.status === 'active'),
+    [clients.data],
+  );
   const sites = useCollection<Site>('sites', masterDataFilter);
   const equipment = useCollection<Equipment>('equipment', masterDataFilter);
   const catalog = useCollection<CatalogItem>('catalogItems', [constraints.activeOnly()], 100);
@@ -402,7 +406,7 @@ export function QuotesPage() {
                 onChange={(event) => setCreationClientId(event.target.value)}
               >
                 <option value="">Selecciona</option>
-                {clients.data.map((client) => (
+                {creationClients.map((client) => (
                   <option key={client.id} value={client.id}>
                     {client.name}
                   </option>
@@ -427,7 +431,7 @@ export function QuotesPage() {
             {message && <p className="form-message form-message--error field-wide">{message}</p>}
             <button
               className="button button--primary field-wide"
-              disabled={busy || clients.data.length === 0}
+              disabled={busy || creationClients.length === 0}
             >
               {busy ? 'Creando…' : 'Crear cotización'}
             </button>

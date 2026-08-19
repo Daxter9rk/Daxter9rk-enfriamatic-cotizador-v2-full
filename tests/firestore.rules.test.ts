@@ -333,6 +333,28 @@ describe('Firestore rules — ownership, scope, and known IDs', () => {
 });
 
 describe('Firestore rules — create, update, delete, and immutable fields', () => {
+  it('keeps client deletion backend-only and limits status changes to administrators', async () => {
+    const anonymousDb = environment.unauthenticatedContext().firestore();
+    const operatorDb = environment.authenticatedContext('operator').firestore();
+    const adminDb = environment.authenticatedContext('admin').firestore();
+    await assertFails(deleteDoc(doc(anonymousDb, 'clients/authorized')));
+    await assertFails(deleteDoc(doc(operatorDb, 'clients/authorized')));
+    await assertFails(
+      updateDoc(doc(operatorDb, 'clients/authorized'), {
+        status: 'inactive',
+        updatedAt: serverTimestamp(),
+        updatedBy: 'operator',
+      }),
+    );
+    await assertSucceeds(
+      updateDoc(doc(adminDb, 'clients/authorized'), {
+        status: 'inactive',
+        updatedAt: serverTimestamp(),
+        updatedBy: 'admin',
+      }),
+    );
+  });
+
   it('allows valid admin master-data writes but freezes ACL and denies deletion', async () => {
     const db = environment.authenticatedContext('admin').firestore();
     const reference = doc(db, 'clients/new-client');

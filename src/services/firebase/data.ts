@@ -298,3 +298,12 @@ export async function callFunction<TInput, TOutput>(name: string, data: TInput):
   const result = await callable(data);
   return result.data;
 }
+
+export type DeleteClientResult =
+  | {outcome: 'deleted'}
+  | {outcome: 'already_deleted'}
+  | {outcome: 'has_dependencies'; dependencySummary?: Record<string, number>};
+
+export function deleteClient(clientId: string): Promise<DeleteClientResult> {
+  return callFunction<{clientId: string}, DeleteClientResult>('deleteClient', {clientId});
+}

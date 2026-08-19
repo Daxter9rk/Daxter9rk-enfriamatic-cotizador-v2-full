@@ -143,6 +143,24 @@ h2 {
   color: white;
   background: var(--red-600);
 }
+.button--danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  border-color: #f2b8b5;
+  background: #fff8f7;
+}
+.danger-zone h2,
+.danger-zone p {
+  margin-top: 0.25rem;
+  margin-bottom: 0;
+}
 .button-row {
   display: flex;
   flex-wrap: wrap;
@@ -1452,7 +1470,9 @@ th {
   border-radius: 999px;
   background: var(--line);
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
 }
 .tax-switch input::after {
   content: '';

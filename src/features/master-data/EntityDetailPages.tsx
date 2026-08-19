@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState, type FormEvent} from 'react';
+import {useEffect, useMemo, useRef, useState, type FormEvent} from 'react';
 import {Link} from 'wouter';
 import {useAuth} from '../../app/providers/AuthProvider';
 import {Icon} from '../../components/Icon';
@@ -15,17 +15,81 @@ import type {
   Site,
 } from '../../models/domain';
 import {equipmentInterventionInputSchema} from '../../models/schemas';
-import {constraints, createDocument, getDocument} from '../../services/firebase/data';
+import {
+  constraints,
+  createDocument,
+  deleteClient,
+  getDocument,
+  updateDocument,
+  type DeleteClientResult,
+} from '../../services/firebase/data';
 import {formatDate} from '../../utils/format';
 import {FileManager} from './FileManager';
 
+type DeleteClientDialogState =
+  | 'confirm'
+  | 'checking'
+  | 'has_dependencies'
+  | 'deactivating'
+  | 'error';
+
 export function ClientDetailPage({clientId}: {clientId: string}) {
+  const {profile} = useAuth();
   const client = useDocument<Client>('clients', clientId);
   const related = useMemo(() => [constraints.byClient(clientId)], [clientId]);
   const sites = useCollection<Site>('sites', related, 50);
   const equipment = useCollection<Equipment>('equipment', related, 50);
   const requests = useCollection<ServiceRequest>('requests', related, 50);
   const quotes = useCollection<Quote>('quotes', related, 50);
+  const [dialog, setDialog] = useState<DeleteClientDialogState | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const cancelDeleteRef = useRef<HTMLButtonElement>(null);
+
+  const closeDialog = () => {
+    if (dialog !== 'checking' && dialog !== 'deactivating') {
+      setDialog(null);
+      setActionError(null);
+    }
+  };
+
+  const removeClient = async () => {
+    if (!client.data || dialog === 'checking' || dialog === 'deactivating') return;
+    setDialog('checking');
+    setActionError(null);
+    try {
+      const result: DeleteClientResult = await deleteClient(client.data.id);
+      if (result.outcome === 'has_dependencies') {
+        setDialog('has_dependencies');
+      } else {
+        setDialog(null);
+        setActionNotice(
+          result.outcome === 'already_deleted'
+            ? 'El cliente ya no existe.'
+            : 'Cliente eliminado permanentemente.',
+        );
+        await client.reload();
+      }
+    } catch (error) {
+      setDialog('error');
+      setActionError(formatClientActionError(error));
+    }
+  };
+
+  const deactivateClient = async () => {
+    if (!client.data || !profile || dialog === 'checking' || dialog === 'deactivating') return;
+    setDialog('deactivating');
+    setActionError(null);
+    try {
+      await updateDocument('clients', client.data.id, {status: 'inactive'}, profile.uid);
+      setDialog(null);
+      setActionNotice('Cliente desactivado. Ya no aparecerá en nuevas cotizaciones.');
+      await client.reload();
+    } catch (error) {
+      setDialog('error');
+      setActionError(formatClientActionError(error));
+    }
+  };
 
   if (client.loading) return <StatePanel kind="loading" title="Cargando cliente…" />;
   if (client.error || !client.data)
@@ -85,6 +149,95 @@ export function ClientDetailPage({clientId}: {clientId: string}) {
         requests={requests.data}
         quotes={quotes.data}
       />
+      {actionNotice && <p className="form-message form-message--success">{actionNotice}</p>}
+      {profile?.role === 'admin' && (
+        <section className="panel danger-zone" aria-label="Acciones administrativas">
+          <div>
+            <p className="eyebrow">Zona de peligro</p>
+            <h2>Eliminar cliente</h2>
+            <p>
+              La eliminación permanente sólo está disponible cuando no existe historial relacionado.
+            </p>
+          </div>
+          <button
+            className="button button--danger"
+            onClick={() => {
+              setActionError(null);
+              setDialog('confirm');
+            }}
+            disabled={client.data.status !== 'active' && dialog !== null}
+          >
+            Eliminar cliente
+          </button>
+        </section>
+      )}
+      {dialog && (
+        <Modal
+          title={
+            dialog === 'has_dependencies'
+              ? 'Cliente con historial'
+              : dialog === 'checking'
+                ? 'Comprobando dependencias'
+                : dialog === 'deactivating'
+                  ? 'Desactivando cliente'
+                  : 'Eliminar cliente'
+          }
+          onClose={closeDialog}
+          initialFocusRef={cancelDeleteRef}
+        >
+          {dialog === 'has_dependencies' ? (
+            <div className="stacked-form">
+              <p>Este cliente tiene historial relacionado y no puede eliminarse permanentemente.</p>
+              <p>
+                Puedes desactivarlo para impedir su uso en nuevas cotizaciones sin perder su
+                historial.
+              </p>
+              <div className="form-actions">
+                <button
+                  ref={cancelDeleteRef}
+                  className="button button--ghost"
+                  onClick={closeDialog}
+                >
+                  Cancelar
+                </button>
+                {client.data.status === 'active' && (
+                  <button className="button button--danger" onClick={() => void deactivateClient()}>
+                    Desactivar cliente
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : dialog === 'checking' ? (
+            <div className="stacked-form" role="status">
+              <p>Estamos verificando si existen cotizaciones o historial relacionado.</p>
+            </div>
+          ) : dialog === 'deactivating' ? (
+            <div className="stacked-form" role="status">
+              <p>Actualizando el estado del cliente…</p>
+            </div>
+          ) : dialog === 'confirm' || dialog === 'error' ? (
+            <div className="stacked-form">
+              <p>
+                Se eliminará permanentemente <strong>“{client.data.name}”</strong>. Esta acción no
+                puede deshacerse.
+              </p>
+              {actionError && <p className="form-message form-message--error">{actionError}</p>}
+              <div className="form-actions">
+                <button
+                  ref={cancelDeleteRef}
+                  className="button button--ghost"
+                  onClick={closeDialog}
+                >
+                  Cancelar
+                </button>
+                <button className="button button--danger" onClick={() => void removeClient()}>
+                  Eliminar cliente
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </Modal>
+      )}
     </>
   );
 }
@@ -535,6 +688,7 @@ function useDocument<T>(collectionName: string, id: string, enabled = true) {
   const [data, setData] = useState<(T & {id: string}) | null>(null);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
   useEffect(() => {
     let active = true;
     if (!enabled || !id) {
@@ -556,8 +710,17 @@ function useDocument<T>(collectionName: string, id: string, enabled = true) {
     return () => {
       active = false;
     };
-  }, [collectionName, id, enabled]);
-  return {data, loading, error};
+  }, [collectionName, id, enabled, revision]);
+  return {data, loading, error, reload: () => setRevision((value) => value + 1)};
+}
+
+function formatClientActionError(error: unknown): string {
+  const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
+  if (code.includes('unauthenticated'))
+    return 'Tu sesión ya no es válida. Inicia sesión nuevamente.';
+  if (code.includes('permission-denied')) return 'No tienes permisos para realizar esta acción.';
+  if (code.includes('not-found')) return 'El cliente ya no existe.';
+  return 'No fue posible completar la operación. Inténtalo de nuevo.';
 }
 
 function formatAddress(address: Site['address']) {

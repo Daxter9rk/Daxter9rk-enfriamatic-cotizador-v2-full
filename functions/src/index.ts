@@ -37,3 +37,4 @@ export {
   deleteCatalogImage,
   getCatalogImageContent,
 } from './catalog/catalogImageCallables';
+export {deleteClient} from './clients/deleteClient';
