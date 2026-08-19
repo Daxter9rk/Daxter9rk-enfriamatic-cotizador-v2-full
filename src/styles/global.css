@@ -2441,10 +2441,123 @@ th {
   color: var(--blue-700);
   background: linear-gradient(145deg, #edf5ff, #f8fbff);
 }
-.catalog-card__image img {
+.catalog-editor-image {
+  min-height: 190px;
+  display: grid;
+  place-items: center;
+  gap: 0.7rem;
+  margin: -1rem -1rem 1rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--line);
+  color: var(--blue-700);
+  background: #f4f8fc;
+}
+.catalog-card__image img,
+.catalog-editor-image img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  max-height: 230px;
+  object-fit: contain;
+}
+.catalog-editor-image--placeholder {
+  color: var(--muted);
+}
+.catalog-editor-image__actions {
+  justify-content: center;
+}
+.catalog-results-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.8rem 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.catalog-table {
+  overflow-x: auto;
+  margin-bottom: 2rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: white;
+}
+.catalog-table table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+}
+.catalog-table th,
+.catalog-table td {
+  padding: 0.75rem 0.9rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+.catalog-table th {
+  color: var(--muted);
+  background: #f4f8fc;
+  font-size: 0.75rem;
+}
+.catalog-table td:first-child {
+  min-width: 220px;
+}
+.catalog-table td small {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--muted);
+}
+.switch-field {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 44px;
+  cursor: pointer;
+}
+.switch-field input {
+  position: relative;
+  width: 46px;
+  height: 26px;
+  flex: 0 0 auto;
+  appearance: none;
+  border: 1px solid #9aafc3;
+  border-radius: 999px;
+  background: #dbe4ec;
+  cursor: pointer;
+}
+.switch-field input::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 22%);
+  transition: transform 120ms ease;
+}
+.switch-field input:checked {
+  border-color: var(--blue-600);
+  background: var(--blue-600);
+}
+.switch-field input:checked::after {
+  transform: translateX(20px);
+}
+.switch-field input:focus-visible {
+  outline: 3px solid rgb(20 103 190 / 28%);
+  outline-offset: 2px;
+}
+.switch-field input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.switch-field span {
+  display: grid;
+  gap: 0.1rem;
+}
+.switch-field small {
+  color: var(--muted);
 }
 
 .settings-form input[readonly],

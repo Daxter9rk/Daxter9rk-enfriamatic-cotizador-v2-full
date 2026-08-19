@@ -9,6 +9,9 @@ import {expect, test, type Page} from '@playwright/test';
 
 const projectId = 'demo-enfriamatic';
 const password = 'DevOnly!Enfriamatic2026';
+process.env.FIRESTORE_EMULATOR_HOST ??= '127.0.0.1:8080';
+process.env.GCLOUD_PROJECT ??= projectId;
+process.env.FIREBASE_STORAGE_EMULATOR_HOST ??= '127.0.0.1:9199';
 const requireFromFunctions = createRequire(resolve('functions/package.json'));
 
 interface SharpPipeline {
@@ -261,20 +264,25 @@ test('commercial catalog UI persists a private image and keeps operator read-onl
     let card = page.locator('article.catalog-card').filter({
       has: page.getByRole('heading', {name: itemName}),
     });
-    await expect(card.getByRole('button', {name: 'Agregar imagen'})).toBeVisible();
-    await card.locator('input[type="file"]').setInputFiles({
+    expect(await card.getByRole('button', {name: /imagen/i}).count()).toBe(0);
+    await card.getByRole('button', {name: 'Editar'}).click();
+    let editor = page.getByRole('dialog');
+    await expect(editor.getByRole('button', {name: 'Agregar imagen'})).toBeVisible();
+    await editor.locator('input[type="file"]').setInputFiles({
       name: 'catalogo.png',
       mimeType: 'image/png',
       buffer: image,
     });
-    await expect(card.getByRole('img', {name: `Imagen de ${itemName}`})).toBeVisible();
-    await expect(card.getByRole('button', {name: 'Cambiar imagen'})).toBeVisible();
+    await expect(editor.getByRole('img', {name: `Imagen de ${itemName}`})).toBeVisible();
+    await expect(editor.getByRole('button', {name: 'Cambiar imagen'})).toBeVisible();
+    await editor.getByRole('button', {name: 'Cerrar', exact: true}).click();
 
     await page.reload({waitUntil: 'domcontentloaded'});
     card = page.locator('article.catalog-card').filter({
       has: page.getByRole('heading', {name: itemName}),
     });
     await expect(card.getByRole('img', {name: `Imagen de ${itemName}`})).toBeVisible();
+    expect(await card.getByRole('button', {name: /imagen/i}).count()).toBe(0);
     await logout(page);
 
     await login(page, 'operador@enfriamatic.local');
@@ -299,15 +307,42 @@ test('commercial catalog UI persists a private image and keeps operator read-onl
     card = page.locator('article.catalog-card').filter({
       has: page.getByRole('heading', {name: itemName}),
     });
-    page.once('dialog', (dialog) => dialog.accept());
-    await card.getByRole('button', {name: 'Eliminar imagen'}).click();
-    await expect(card.getByRole('button', {name: 'Agregar imagen'})).toBeVisible();
+    await card.getByRole('button', {name: 'Editar'}).click();
+    editor = page.getByRole('dialog');
+    await editor.getByRole('button', {name: 'Eliminar imagen'}).click();
+    const deleteDialog = page.getByRole('dialog').filter({hasText: 'será eliminada'}).last();
+    await expect(deleteDialog).toContainText(
+      `La imagen del artículo “${itemName}” será eliminada.`,
+    );
+    await deleteDialog.getByRole('button', {name: 'Cancelar'}).click();
+    await expect(editor.getByRole('button', {name: 'Eliminar imagen'})).toBeVisible();
+    await editor.getByRole('button', {name: 'Eliminar imagen'}).click();
+    await page
+      .getByRole('dialog')
+      .filter({hasText: 'será eliminada'})
+      .last()
+      .getByRole('button', {name: 'Eliminar imagen'})
+      .click();
+    await expect(editor.getByRole('button', {name: 'Agregar imagen'})).toBeVisible();
+    await editor.getByRole('button', {name: 'Cerrar', exact: true}).click();
     await page.reload({waitUntil: 'domcontentloaded'});
     card = page.locator('article.catalog-card').filter({
       has: page.getByRole('heading', {name: itemName}),
     });
     await expect(card.getByRole('img', {name: `Imagen de ${itemName}`})).toHaveCount(0);
     await expect(page.getByRole('link', {name: 'Actividad', exact: true})).toHaveCount(0);
+    await card.getByRole('button', {name: 'Editar'}).click();
+    editor = page.getByRole('dialog');
+    await editor.getByRole('checkbox', {name: /artículo activo/i}).uncheck();
+    await editor.getByRole('button', {name: 'Guardar artículo'}).click();
+    await expect(page.getByText('Inactivo', {exact: true}).first()).toBeVisible();
+    await page.goto('/quotes');
+    await page.getByTestId('new-quote').click();
+    await page.getByTestId('quote-client').selectOption({label: 'Procesos Fríos del Bajío'});
+    await page.getByRole('button', {name: 'Crear cotización'}).click();
+    await expect(
+      page.locator(`.quote-catalog button[aria-label="Agregar ${itemName}"]`),
+    ).toHaveCount(0);
   } finally {
     await deleteAdminApp(adminApp);
   }

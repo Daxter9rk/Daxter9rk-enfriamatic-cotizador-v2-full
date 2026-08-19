@@ -85,9 +85,7 @@ export function QuoteEditor({
   const panelTriggerRef = useRef<HTMLButtonElement>(null);
   const [editingItem, setEditingItem] = useState<QuoteItem | null>(null);
   const [manualItemOpen, setManualItemOpen] = useState(false);
-  const [globalDiscountType, setGlobalDiscountType] = useState(
-    quote.globalDiscountType ?? 'none',
-  );
+  const [globalDiscountType, setGlobalDiscountType] = useState(quote.globalDiscountType ?? 'none');
   const [globalDiscountValue, setGlobalDiscountValue] = useState(quote.globalDiscountValue ?? 0);
   const [applyTax, setApplyTax] = useState(quote.applyTax ?? true);
   const [catalogSearch, setCatalogSearch] = useState('');
@@ -113,12 +111,7 @@ export function QuoteEditor({
             taxTotal: quote.taxTotal ?? 0,
             grandTotal: quote.grandTotal ?? 0,
           }
-        : calculateQuoteTotals(
-            items,
-            quote.taxRate ?? 0.16,
-            {type: 'none', value: 0},
-            applyTax,
-          ),
+        : calculateQuoteTotals(items, quote.taxRate ?? 0.16, {type: 'none', value: 0}, applyTax),
     [applyTax, items, quote],
   );
   const globalDiscountError =
@@ -146,7 +139,15 @@ export function QuoteEditor({
       {type: globalDiscountType, value: globalDiscountValue},
       applyTax,
     );
-  }, [applyTax, baseTotals, globalDiscountError, globalDiscountType, globalDiscountValue, items, quote]);
+  }, [
+    applyTax,
+    baseTotals,
+    globalDiscountError,
+    globalDiscountType,
+    globalDiscountValue,
+    items,
+    quote,
+  ]);
 
   const reloadItems = async () => {
     setLoading(true);
@@ -238,6 +239,8 @@ export function QuoteEditor({
     setBusy(true);
     setMessage(null);
     try {
+      if (item.status !== 'active')
+        throw new Error('El artículo está inactivo y no puede agregarse a una cotización.');
       const parsed = quoteItemInputSchema.parse(createQuoteItemFromCatalog(item, items.length));
       await saveQuoteItem(quote.id, null, {...parsed, ...calculateItem(parsed)});
       await persistTotals();
@@ -492,7 +495,9 @@ export function QuoteEditor({
                       />
                       <span>Aplicar IVA {quote.taxRate ? `${quote.taxRate * 100} %` : '16 %'}</span>
                     </label>
-                    <small>Descuento calculado: {formatCurrency(totals.globalDiscountAmount ?? 0)}</small>
+                    <small>
+                      Descuento calculado: {formatCurrency(totals.globalDiscountAmount ?? 0)}
+                    </small>
                     {globalDiscountError && (
                       <small role="alert" className="form-message form-message--error">
                         {globalDiscountError}

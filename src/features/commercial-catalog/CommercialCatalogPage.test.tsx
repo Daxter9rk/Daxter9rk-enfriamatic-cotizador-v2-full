@@ -1,4 +1,5 @@
-import {cleanup, render, screen} from '@testing-library/react';
+import {cleanup, render, screen, within} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {CommercialCatalogPage} from './CommercialCatalogPage';
 
@@ -63,6 +64,7 @@ describe('CommercialCatalogPage', () => {
 
   beforeEach(() => {
     state.role = 'operator';
+    localStorage.removeItem('enfriamatic-catalog-view');
   });
   it('muestra búsqueda, filtros y artículos activos al operador', () => {
     render(<CommercialCatalogPage />);
@@ -70,14 +72,15 @@ describe('CommercialCatalogPage', () => {
     expect(screen.getByRole('heading', {name: 'Compresor de prueba'})).toBeVisible();
     expect(screen.queryByRole('button', {name: /nuevo artículo/i})).not.toBeInTheDocument();
   });
-  it('habilita administración para admin', () => {
+  it('habilita administración para admin dentro del editor', async () => {
     state.role = 'admin';
     render(<CommercialCatalogPage />);
     expect(screen.getByRole('button', {name: /nuevo artículo/i})).toBeVisible();
-    expect(screen.getAllByRole('button', {name: /desactivar/i})).toHaveLength(2);
-    expect(screen.getByRole('button', {name: /agregar imagen/i})).toBeVisible();
-    expect(screen.getByRole('button', {name: /cambiar imagen/i})).toBeVisible();
-    expect(screen.getByRole('button', {name: /eliminar imagen/i})).toBeVisible();
+    expect(screen.queryByRole('button', {name: /imagen/i})).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getAllByRole('button', {name: 'Editar'})[0]!);
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('button', {name: /agregar imagen/i})).toBeVisible();
+    expect(within(dialog).getByRole('checkbox', {name: /artículo activo/i})).toBeChecked();
   });
 
   it('mantiene al operador en lectura sin controles de imagen', () => {
@@ -94,5 +97,16 @@ describe('CommercialCatalogPage', () => {
     expect(screen.getByRole('heading', {name: 'Compresor de prueba'})).toBeVisible();
     await user.type(screen.getByRole('searchbox'), 'no-existe');
     expect(screen.getByText(/no se encontraron coincidencias/i)).toBeVisible();
+  });
+
+  it('switches between cards and table without losing filters', async () => {
+    const user = userEvent.setup();
+    render(<CommercialCatalogPage />);
+    await user.type(screen.getByRole('searchbox'), 'compresor');
+    await user.click(screen.getByRole('button', {name: 'Tabla'}));
+    expect(screen.getByRole('table')).toBeVisible();
+    expect(screen.getByRole('row', {name: /Compresor de prueba/})).toBeVisible();
+    await user.click(screen.getByRole('button', {name: 'Tarjetas'}));
+    expect(screen.getByRole('heading', {name: 'Compresor de prueba'})).toBeVisible();
   });
 });

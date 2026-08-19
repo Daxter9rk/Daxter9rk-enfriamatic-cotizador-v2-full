@@ -44,6 +44,9 @@ export function CommercialCatalogPage() {
     `${profile?.role ?? 'operator'}|${status}|${search}|${type}|${category}|${unit}|${sort}`,
   );
   const [editing, setEditing] = useState<CatalogItem | 'new' | null>(null);
+  const [view, setView] = useState<'cards' | 'table'>(
+    () => (localStorage.getItem('enfriamatic-catalog-view') as 'cards' | 'table') ?? 'cards',
+  );
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -91,7 +94,7 @@ export function CommercialCatalogPage() {
         basePrice: Number(form.get('basePrice')),
         // Kept only for historical schema compatibility; IVA is global.
         taxable: true,
-        status: form.get('status'),
+        status: form.get('status') ? 'active' : 'inactive',
         searchTokens: buildSearchTokens(
           code,
           String(form.get('name')),
@@ -114,20 +117,6 @@ export function CommercialCatalogPage() {
       await catalog.reload();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No fue posible guardar el artículo.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const deactivate = async (item: CatalogItem) => {
-    if (!profile || profile.role !== 'admin') return;
-    setBusy(true);
-    setMessage(null);
-    try {
-      await updateDocument('catalogItems', item.id, {status: 'inactive'}, profile.uid);
-      await catalog.reload();
-    } catch {
-      setMessage('No fue posible desactivar el artículo.');
     } finally {
       setBusy(false);
     }
@@ -206,6 +195,24 @@ export function CommercialCatalogPage() {
           </select>
         )}
       </FilterBar>
+      <div className="catalog-results-bar">
+        <span>{visible.length} artículos</span>
+        <div className="view-toggle" aria-label="Vista del catálogo">
+          {(['cards', 'table'] as const).map((option) => (
+            <button
+              type="button"
+              key={option}
+              className={view === option ? 'active' : undefined}
+              onClick={() => {
+                setView(option);
+                localStorage.setItem('enfriamatic-catalog-view', option);
+              }}
+            >
+              {option === 'cards' ? 'Tarjetas' : 'Tabla'}
+            </button>
+          ))}
+        </div>
+      </div>
       {catalog.error ? (
         <StatePanel kind="error" title="No fue posible cargar el catálogo">
           <button className="button button--secondary" onClick={() => void catalog.reload()}>
@@ -227,63 +234,99 @@ export function CommercialCatalogPage() {
           </p>
         </StatePanel>
       ) : (
-        <section className="catalog-grid" aria-label={`${visible.length} artículos`}>
-          {visible.map((item) => (
-            <article className="catalog-card" key={item.id}>
-              <CatalogImage
-                item={item}
-                admin={profile?.role === 'admin'}
-                onChanged={() => catalog.reload()}
-              />
-              <div className="catalog-card__top">
-                <span className={`catalog-type catalog-type--${item.type}`}>
-                  {item.type === 'product' ? 'Producto' : 'Servicio'}
-                </span>
-                <span className={`badge badge--${item.status}`}>
-                  {item.status === 'active' ? 'Activo' : 'Inactivo'}
-                </span>
-              </div>
-              <small>{item.code}</small>
-              <h2>{item.name}</h2>
-              <p>{item.description}</p>
-              <dl>
-                <div>
-                  <dt>Categoría</dt>
-                  <dd>{item.category}</dd>
+        <section
+          className={view === 'cards' ? 'catalog-grid' : 'catalog-table'}
+          aria-label={`${visible.length} artículos`}
+        >
+          {view === 'cards' ? (
+            visible.map((item) => (
+              <article className="catalog-card" key={item.id}>
+                <CatalogImageManager
+                  item={item}
+                  controls={false}
+                  onChanged={() => catalog.reload()}
+                />
+                <div className="catalog-card__top">
+                  <span className={`catalog-type catalog-type--${item.type}`}>
+                    {item.type === 'product' ? 'Producto' : 'Servicio'}
+                  </span>
+                  <span className={`badge badge--${item.status}`}>
+                    {item.status === 'active' ? 'Activo' : 'Inactivo'}
+                  </span>
                 </div>
-                <div>
-                  <dt>Unidad</dt>
-                  <dd>{item.unit}</dd>
-                </div>
-                {(item.brand || item.model) && (
+                <small>{item.code}</small>
+                <h2>{item.name}</h2>
+                <p>{item.description}</p>
+                <dl>
                   <div>
-                    <dt>Marca / modelo</dt>
-                    <dd>{[item.brand, item.model].filter(Boolean).join(' · ')}</dd>
+                    <dt>Categoría</dt>
+                    <dd>{item.category}</dd>
+                  </div>
+                  <div>
+                    <dt>Unidad</dt>
+                    <dd>{item.unit}</dd>
+                  </div>
+                  {(item.brand || item.model) && (
+                    <div>
+                      <dt>Marca / modelo</dt>
+                      <dd>{[item.brand, item.model].filter(Boolean).join(' · ')}</dd>
+                    </div>
+                  )}
+                </dl>
+                <footer>
+                  <strong>{formatCurrency(item.basePrice)}</strong>
+                  <span>Precio antes de IVA</span>
+                </footer>
+                {profile?.role === 'admin' && (
+                  <div className="button-row">
+                    <button className="button button--ghost" onClick={() => setEditing(item)}>
+                      Editar
+                    </button>
                   </div>
                 )}
-              </dl>
-              <footer>
-                <strong>{formatCurrency(item.basePrice)}</strong>
-                <span>Precio antes de IVA</span>
-              </footer>
-              {profile?.role === 'admin' && (
-                <div className="button-row">
-                  <button className="button button--ghost" onClick={() => setEditing(item)}>
-                    Editar
-                  </button>
-                  {item.status === 'active' && (
-                    <button
-                      className="button button--danger"
-                      disabled={busy}
-                      onClick={() => void deactivate(item)}
-                    >
-                      Desactivar
-                    </button>
-                  )}
-                </div>
-              )}
-            </article>
-          ))}
+              </article>
+            ))
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Artículo</th>
+                  <th>Tipo</th>
+                  <th>Categoría</th>
+                  <th>Unidad</th>
+                  <th>Estado</th>
+                  <th>Precio</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <strong>{item.name}</strong>
+                      <small>{item.code}</small>
+                    </td>
+                    <td>{item.type === 'product' ? 'Producto' : 'Servicio'}</td>
+                    <td>{item.category}</td>
+                    <td>{item.unit}</td>
+                    <td>
+                      <span className={`badge badge--${item.status}`}>
+                        {item.status === 'active' ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </td>
+                    <td>{formatCurrency(item.basePrice)}</td>
+                    <td>
+                      {profile?.role === 'admin' && (
+                        <button className="button button--ghost" onClick={() => setEditing(item)}>
+                          Editar
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </section>
       )}
       {!catalog.loading && !catalog.error && (catalog.page > 1 || catalog.hasMore) && (
@@ -313,6 +356,9 @@ export function CommercialCatalogPage() {
           message={message}
           onClose={() => setEditing(null)}
           onSubmit={submit}
+          onImageChanged={async () => {
+            await catalog.reload();
+          }}
         />
       )}
     </>
@@ -325,12 +371,14 @@ function CatalogEditor({
   message,
   onClose,
   onSubmit,
+  onImageChanged,
 }: {
   item: CatalogItem | 'new';
   busy: boolean;
   message: string | null;
   onClose(): void;
   onSubmit(event: FormEvent<HTMLFormElement>): Promise<void>;
+  onImageChanged(): Promise<void>;
 }) {
   const current = item === 'new' ? null : item;
   return (
@@ -338,6 +386,14 @@ function CatalogEditor({
       title={current ? `Editar ${current.code}` : 'Nuevo artículo comercial'}
       onClose={onClose}
     >
+      {current ? (
+        <CatalogImageManager item={current} controls onChanged={onImageChanged} />
+      ) : (
+        <div className="catalog-editor-image catalog-editor-image--placeholder">
+          <Icon name="equipment" width={42} height={42} />
+          <span>Guarda el artículo para agregar una imagen.</span>
+        </div>
+      )}
       <form className="form-grid" onSubmit={(event) => void onSubmit(event)}>
         <label>
           Código
@@ -396,12 +452,18 @@ function CatalogEditor({
             defaultValue={current?.basePrice ?? 0}
           />
         </label>
-        <label>
-          Estado
-          <select name="status" defaultValue={current?.status ?? 'active'}>
-            <option value="active">Activo</option>
-            <option value="inactive">Inactivo</option>
-          </select>
+        <label className="switch-field field-wide">
+          <input
+            type="checkbox"
+            name="status"
+            value="active"
+            defaultChecked={current?.status !== 'inactive'}
+            disabled={busy}
+          />
+          <span>
+            <strong>Artículo activo</strong>
+            <small>Activo / Inactivo</small>
+          </span>
         </label>
         {message && <p className="form-message form-message--error field-wide">{message}</p>}
         <button className="button button--primary field-wide" disabled={busy}>
@@ -412,19 +474,22 @@ function CatalogEditor({
   );
 }
 
-function CatalogImage({
+function CatalogImageManager({
   item,
-  admin,
+  controls,
   onChanged,
 }: {
   item: CatalogItem;
-  admin: boolean;
+  controls: boolean;
   onChanged(): Promise<void>;
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null);
+  const cancelDeleteRef = useRef<HTMLButtonElement>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const objectUrlRef = useRef<string | null>(null);
   const hasImage = Boolean(item.imageStoragePath && item.imageStatus === 'ready');
 
@@ -500,7 +565,7 @@ function CatalogImage({
   };
 
   const removeImage = async () => {
-    if (busy || !window.confirm('¿Eliminar la imagen actual del artículo?')) return;
+    if (busy) return;
     setBusy(true);
     setMessage(null);
     try {
@@ -510,6 +575,7 @@ function CatalogImage({
       setImagePresent(false);
 
       await onChanged();
+      setConfirmDelete(false);
       if (result.cleanupPending) {
         setMessage('La referencia fue retirada; la limpieza física queda pendiente de reintento.');
       }
@@ -529,15 +595,15 @@ function CatalogImage({
 
   return (
     <>
-      <div className="catalog-card__image">
+      <div className="catalog-editor-image">
         {url ? (
           <img src={url} alt={`Imagen de ${item.name}`} />
         ) : (
           <Icon name={item.type === 'product' ? 'equipment' : 'support'} width={34} height={34} />
         )}
       </div>
-      {admin && (
-        <div className="button-row catalog-card__image-actions">
+      {controls && (
+        <div className="button-row catalog-editor-image__actions">
           <input
             ref={inputRef}
             hidden
@@ -555,10 +621,11 @@ function CatalogImage({
           </button>
           {imagePresent && (
             <button
+              ref={deleteTriggerRef}
               type="button"
               className="button button--danger"
               disabled={busy}
-              onClick={() => void removeImage()}
+              onClick={() => setConfirmDelete(true)}
             >
               Eliminar imagen
             </button>
@@ -566,6 +633,33 @@ function CatalogImage({
         </div>
       )}
       {message && <p className="form-message form-message--error">{message}</p>}
+      {confirmDelete && (
+        <Modal
+          title="Eliminar imagen"
+          onClose={() => setConfirmDelete(false)}
+          initialFocusRef={cancelDeleteRef}
+        >
+          <p>La imagen del artículo “{item.name}” será eliminada.</p>
+          <div className="button-row">
+            <button
+              ref={cancelDeleteRef}
+              type="button"
+              className="button button--ghost"
+              onClick={() => setConfirmDelete(false)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="button button--danger"
+              disabled={busy}
+              onClick={() => void removeImage()}
+            >
+              Eliminar imagen
+            </button>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }
