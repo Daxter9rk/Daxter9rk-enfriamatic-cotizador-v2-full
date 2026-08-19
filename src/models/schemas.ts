@@ -155,7 +155,7 @@ export const createUserInputSchema = z.object({
   password: z.string().min(12).max(128),
   displayName: z.string().trim().min(2).max(120),
   role: z.enum(['admin', 'operator']),
-  status: z.enum(['active', 'inactive', 'pending', 'suspended']),
+  status: z.enum(['active', 'inactive']),
 });
 
 export const supportRequestInputSchema = z.object({

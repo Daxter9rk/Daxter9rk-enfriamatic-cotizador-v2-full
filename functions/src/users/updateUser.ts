@@ -45,7 +45,9 @@ export const updateUser = onCall(
         {role: input.role, status: input.status},
         activeAdmins.size,
       );
-      if (failure) throw new HttpsError('failed-precondition', userPolicyMessage(failure));
+      if (failure) {
+        throw new HttpsError('failed-precondition', userPolicyMessage(failure), {reason: failure});
+      }
       const sensitiveChange = before.role !== input.role || before.status !== input.status;
       if (sensitiveChange) requireRecentAuthentication(request);
 

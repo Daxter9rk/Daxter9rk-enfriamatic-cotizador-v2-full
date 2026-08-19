@@ -24,6 +24,19 @@ describe('runtime schemas', () => {
     expect(result.success).toBe(false);
   });
 
+  it('exposes only active and inactive as administrative creation states', () => {
+    const base = {
+      email: 'operator@example.test',
+      password: 'DevOnly!Password2026',
+      displayName: 'Operador',
+      role: 'operator' as const,
+    };
+    expect(createUserInputSchema.safeParse({...base, status: 'active'}).success).toBe(true);
+    expect(createUserInputSchema.safeParse({...base, status: 'inactive'}).success).toBe(true);
+    expect(createUserInputSchema.safeParse({...base, status: 'pending'}).success).toBe(false);
+    expect(createUserInputSchema.safeParse({...base, status: 'suspended'}).success).toBe(false);
+  });
+
   it('enforces quote item limits and valid client status', () => {
     expect(
       quoteItemInputSchema.safeParse({

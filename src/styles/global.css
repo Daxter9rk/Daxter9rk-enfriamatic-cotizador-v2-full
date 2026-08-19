@@ -627,6 +627,10 @@ input:invalid:not(:placeholder-shown) {
   color: #fff;
   background: var(--blue-900);
 }
+.field-help {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
 .support-layout {
   display: grid;
   gap: 1rem;
