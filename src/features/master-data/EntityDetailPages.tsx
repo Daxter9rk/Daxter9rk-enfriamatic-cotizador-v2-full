@@ -68,7 +68,7 @@ export function ClientDetailPage({clientId}: {clientId: string}) {
             ? 'El cliente ya no existe.'
             : 'Cliente eliminado permanentemente.',
         );
-        await client.reload();
+        client.reload();
       }
     } catch (error) {
       setDialog('error');
@@ -84,7 +84,7 @@ export function ClientDetailPage({clientId}: {clientId: string}) {
       await updateDocument('clients', client.data.id, {status: 'inactive'}, profile.uid);
       setDialog(null);
       setActionNotice('Cliente desactivado. Ya no aparecerá en nuevas cotizaciones.');
-      await client.reload();
+      client.reload();
     } catch (error) {
       setDialog('error');
       setActionError(formatClientActionError(error));

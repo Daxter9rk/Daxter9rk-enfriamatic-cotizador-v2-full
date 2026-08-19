@@ -14,13 +14,14 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../services/firebase/data', () => ({
   callFunction: vi.fn(),
   deleteQuoteItem: vi.fn(),
-  listQuoteItems: vi.fn(async () => mocks.listedItems),
+  listQuoteItems: vi.fn(() => Promise.resolve(mocks.listedItems)),
   saveQuoteItem: mocks.saveQuoteItem,
   updateDocument: mocks.updateDocument,
 }));
 
 vi.mock('../../modules/quotes', async () => {
-  const actual = await vi.importActual<typeof import('../../modules/quotes')>('../../modules/quotes');
+  const actual =
+    await vi.importActual<typeof import('../../modules/quotes')>('../../modules/quotes');
   return {...actual, updateQuoteRecord: vi.fn().mockResolvedValue(undefined)};
 });
 

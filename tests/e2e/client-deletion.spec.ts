@@ -83,10 +83,14 @@ test('admin deletes dependency-free clients and deactivates historical clients',
 
     await page.goto('/quotes');
     await page.getByTestId('new-quote').click();
-    await expect(page.getByRole('dialog').locator(`option[value="${historicalId}"]`)).toHaveCount(0);
+    await expect(page.getByRole('dialog').locator(`option[value="${historicalId}"]`)).toHaveCount(
+      0,
+    );
     await page.getByRole('dialog').getByRole('button', {name: 'Cerrar', exact: true}).click();
     await page.goto(`/clients/${historicalId}`);
-    await expect(page.getByRole('heading', {name: 'Cliente histórico DEV', exact: true})).toBeVisible();
+    await expect(
+      page.getByRole('heading', {name: 'Cliente histórico DEV', exact: true}),
+    ).toBeVisible();
   } finally {
     await deleteAdminApp(adminApp);
   }

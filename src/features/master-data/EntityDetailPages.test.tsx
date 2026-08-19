@@ -19,8 +19,10 @@ vi.mock('../../hooks/useCollection', () => ({
 vi.mock('../../services/firebase/data', () => ({
   constraints: {byClient: vi.fn(() => ({}))},
   createDocument: vi.fn(),
-  getDocument: vi.fn(async () => ({id: 'client-1', name: 'Cliente eliminable', status: 'active'})),
-  listDocuments: vi.fn(async () => []),
+  getDocument: vi.fn(() =>
+    Promise.resolve({id: 'client-1', name: 'Cliente eliminable', status: 'active'}),
+  ),
+  listDocuments: vi.fn(() => Promise.resolve([])),
   deleteClient: deleteClientMock,
   updateDocument: updateDocumentMock,
 }));

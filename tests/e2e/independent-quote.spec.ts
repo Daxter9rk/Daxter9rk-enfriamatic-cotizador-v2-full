@@ -290,13 +290,17 @@ test('admin validates the quote editor phase two interactions', async ({page}) =
   await page.getByTestId('quote-item-description').fill('Partida manual');
   await page.getByTestId('quote-item-price').fill('1000');
   await page.getByRole('button', {name: 'Agregar partida', exact: true}).click();
-  await expect(page.locator('.quote-items article').filter({hasText: 'Partida manual'})).toBeVisible();
+  await expect(
+    page.locator('.quote-items article').filter({hasText: 'Partida manual'}),
+  ).toBeVisible();
 
   const manualRow = page.locator('.quote-items article').filter({hasText: 'Partida manual'});
   await manualRow.getByRole('button', {name: 'Editar'}).click();
   await page.getByTestId('quote-item-description').fill('Cambio cancelado');
   await page.getByRole('button', {name: 'Cancelar', exact: true}).click();
-  await expect(page.locator('.quote-items article').filter({hasText: 'Partida manual'})).toBeVisible();
+  await expect(
+    page.locator('.quote-items article').filter({hasText: 'Partida manual'}),
+  ).toBeVisible();
   await expect(page.getByText('Cambio cancelado')).toHaveCount(0);
 
   await page
