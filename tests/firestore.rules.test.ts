@@ -34,9 +34,13 @@ beforeAll(async () => {
       port: 8080,
     },
   });
-});
+}, 30_000);
 
-afterAll(async () => environment.cleanup());
+afterAll(async () => {
+  if (environment) {
+    await environment.cleanup();
+  }
+}, 30_000);
 beforeEach(async () => {
   await environment.clearFirestore();
   await environment.withSecurityRulesDisabled(async (context) => {
