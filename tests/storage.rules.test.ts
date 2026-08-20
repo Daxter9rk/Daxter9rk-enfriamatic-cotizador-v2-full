@@ -29,9 +29,13 @@ beforeAll(async () => {
       port: 9199,
     },
   });
-});
+}, 30_000);
 
-afterAll(async () => environment?.cleanup());
+afterAll(async () => {
+  if (environment) {
+    await environment.cleanup();
+  }
+}, 30_000);
 beforeEach(async () => {
   await environment.clearFirestore();
   await environment.clearStorage();
