@@ -21,7 +21,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "validate": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build && npm --prefix functions run validate",
-    "validate:emulators": "npm run build && npm --prefix functions run build && npx -y firebase-tools@latest emulators:exec --project demo-enfriamatic --only firestore,storage \"vitest run tests/firestore.rules.test.ts tests/storage.rules.test.ts\" && npx -y firebase-tools@latest emulators:exec --project demo-enfriamatic --only auth,firestore,storage,functions,hosting \"npm run seed:emulators && npm run seed:emulators:functional && playwright test\"",
+    "validate:emulators": "node scripts/run-validate-emulators.mjs",
     "emulators": "npm run build && npm --prefix functions run build && npx -y firebase-tools@latest emulators:start --project demo-enfriamatic --import=.emulator-data --export-on-exit=.emulator-data",
     "seed:emulators": "tsx scripts/seed-emulators.ts",
     "seed:emulators:functional": "tsx scripts/seed-emulator-functional.ts",
