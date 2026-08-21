@@ -73,53 +73,56 @@ export function SearchableSelect({
     <label className="searchable-select" htmlFor={inputId}>
       {label}
       <input type="hidden" name={name} value={value} />
-      <input
-        id={inputId}
-        data-testid={name}
-        type="search"
-        value={query}
-        required={required}
-        disabled={disabled}
-        placeholder={placeholder}
-        autoComplete="off"
-        aria-autocomplete="list"
-        aria-controls={listboxId}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-activedescendant={
-          open && visible[activeIndex] ? `${listboxId}-${visible[activeIndex].value}` : undefined
-        }
-        onFocus={() => setOpen(true)}
-        onChange={(event) => {
-          setQuery(event.target.value);
-          setOpen(true);
-          if (event.target.value !== selected?.label) {
-            keepTypedQuery.current = true;
-            onChange?.('');
+      <span className={`searchable-select__control${open ? ' is-open' : ''}`}>
+        <input
+          id={inputId}
+          data-testid={name}
+          type="search"
+          value={query}
+          required={required}
+          disabled={disabled}
+          placeholder={placeholder}
+          autoComplete="off"
+          aria-autocomplete="list"
+          aria-controls={listboxId}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-activedescendant={
+            open && visible[activeIndex] ? `${listboxId}-${visible[activeIndex].value}` : undefined
           }
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') {
-            setOpen(false);
-            return;
-          }
-          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-            event.preventDefault();
-            if (!open) {
-              setOpen(true);
+          onFocus={() => setOpen(true)}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setOpen(true);
+            if (event.target.value !== selected?.label) {
+              keepTypedQuery.current = true;
+              onChange?.('');
+            }
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              setOpen(false);
               return;
             }
-            const direction = event.key === 'ArrowDown' ? 1 : -1;
-            setActiveIndex((index) =>
-              visible.length ? (index + direction + visible.length) % visible.length : 0,
-            );
-          }
-          if (event.key === 'Enter' && open && visible[activeIndex]) {
-            event.preventDefault();
-            choose(visible[activeIndex]);
-          }
-        }}
-      />
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+              event.preventDefault();
+              if (!open) {
+                setOpen(true);
+                return;
+              }
+              const direction = event.key === 'ArrowDown' ? 1 : -1;
+              setActiveIndex((index) =>
+                visible.length ? (index + direction + visible.length) % visible.length : 0,
+              );
+            }
+            if (event.key === 'Enter' && open && visible[activeIndex]) {
+              event.preventDefault();
+              choose(visible[activeIndex]);
+            }
+          }}
+        />
+        <span className="searchable-select__chevron" aria-hidden="true" />
+      </span>
       {open && !disabled && (
         <span id={listboxId} className="searchable-select__options" role="listbox">
           {loading ? (

@@ -47,6 +47,8 @@ describe('SearchableSelect controlado', () => {
     );
 
     const input = screen.getByRole('searchbox', {name: 'Cliente'});
+    expect(input.parentElement).toHaveClass('searchable-select__control');
+    expect(input.parentElement?.querySelector('.searchable-select__chevron')).toBeInTheDocument();
     await user.type(input, 'alvaro');
     expect(screen.getByRole('option', {name: 'Álvaro Núñez'})).toBeVisible();
     await user.keyboard('{ArrowDown}{Enter}');
