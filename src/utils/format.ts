@@ -1,5 +1,9 @@
+export const normalizeMoney = (value: number): number => (Math.abs(value) < 0.005 ? 0 : value);
+
 export const formatCurrency = (value: number): string =>
-  new Intl.NumberFormat('es-MX', {style: 'currency', currency: 'MXN'}).format(value);
+  new Intl.NumberFormat('es-MX', {style: 'currency', currency: 'MXN'}).format(
+    normalizeMoney(value),
+  );
 
 export const formatDate = (value?: {toDate(): Date} | null): string =>
   value

@@ -1,4 +1,4 @@
-"""Generate the two public V2.1 role manuals from an editable source."""
+"""Generate the three public V2.1 manuals from an editable source."""
 
 from pathlib import Path
 from reportlab.lib import colors
@@ -14,12 +14,17 @@ VERSION = "V2.1 - Entorno DEV"
 
 COMMON = [
     ("Acceso y recuperación", ["Usa únicamente tu cuenta individual.", "No compartas contraseñas ni códigos.", "Solicita recuperación de acceso al administrador autorizado."]),
-    ("Clientes, instalaciones y equipos", ["Registra el cliente antes de su instalación.", "Completa ubicación, acceso y contacto del sitio.", "Vincula cada equipo y conserva su expediente técnico."]),
-    ("Solicitudes", ["Crea o abre una solicitud trazable.", "Asigna un responsable activo.", "Avanza Pendiente, Asignada, En progreso y Completada; Cancelada es terminal."]),
-    ("Cotizaciones y PDF", ["Crea el borrador desde una solicitud válida.", "Revisa partidas, descuentos, IVA y total.", "Al emitir se asigna folio, se genera un PDF privado y se bloquea el original."]),
-    ("Corrección de una emitida", ["Nunca desbloquees ni edites la cotización emitida.", "Crea una corrección para obtener nueva solicitud, borrador y folio.", "Conserva la referencia al documento original."]),
-    ("Actividad y notificaciones", ["Usa filtros para localizar el evento.", "Abre la notificación y navega al recurso relacionado.", "No compartas identificadores técnicos fuera del equipo autorizado."]),
-    ("Soporte", ["Abre Manual / Soporte.", "Describe módulo, impacto y pasos observados sin incluir secretos.", "Copia la información técnica no sensible cuando ayude al diagnóstico."]),
+    ("Clientes", ["Registra y busca clientes activos.", "Captura datos de contacto y código postal de cinco dígitos.", "Conserva el historial y desactiva en lugar de borrar cuando existan dependencias."]),
+    ("Catálogo comercial", ["El administrador crea y edita productos y servicios.", "El operador consulta artículos activos.", "Las partidas de cotización conservan un snapshot histórico."]),
+    ("Cotizaciones y PDF", ["Crea una cotización independiente desde un cliente activo.", "Revisa partidas, descuentos, IVA, referencia y contexto técnico.", "Al emitir se asigna folio, se genera un PDF y se bloquea el original."]),
+    ("Corrección de una emitida", ["Nunca desbloquees ni edites la cotización emitida.", "Crea una corrección para obtener una nueva revisión y folio.", "Conserva la referencia al documento original."]),
+    ("Estados y soporte", ["Usa las transiciones comerciales permitidas por tu rol.", "Describe módulo, impacto y pasos observados sin incluir secretos.", "Consulta la biblioteca de Manuales para procedimientos vigentes."]),
+]
+
+GENERAL = [
+    ("Sesión y seguridad", ["Usa tu cuenta individual y confirma el rol mostrado.", "Cierra sesión en equipos compartidos y no compartas credenciales."]),
+    ("Flujo comercial", ["Selecciona un cliente activo, agrega partidas y revisa los totales.", "La vista previa y el PDF deben revisarse antes de compartirlos."]),
+    ("Vigencia V2.1", ["Esta guía sólo documenta Clientes, Catálogo comercial, Cotizaciones, Usuarios, Configuración y Manual."]),
 ]
 
 ADMIN = [
@@ -28,7 +33,7 @@ ADMIN = [
 ] + COMMON
 
 OPERATOR = [
-    ("Alcance del operador", ["Consulta únicamente recursos asignados.", "Registra notas e intervenciones con datos reales.", "Solicita al administrador los cambios de identidad, configuración o datos maestros."]),
+    ("Alcance del operador", ["Consulta recursos autorizados.", "Crea cotizaciones independientes y revisa sus documentos.", "Solicita al administrador los cambios de identidad, configuración o catálogo."]),
 ] + COMMON
 
 
@@ -67,3 +72,4 @@ def generate(role, sections, filename):
 if __name__ == "__main__":
     generate("administrador", ADMIN, "manual-administrador-v2.1.pdf")
     generate("operador", OPERATOR, "manual-operador-v2.1.pdf")
+    generate("general de la plataforma", GENERAL, "manual-general-enfriamatic-v2-1.pdf")

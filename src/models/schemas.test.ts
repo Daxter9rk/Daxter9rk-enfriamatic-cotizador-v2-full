@@ -24,6 +24,19 @@ describe('runtime schemas', () => {
     expect(result.success).toBe(false);
   });
 
+  it('exposes only active and inactive as administrative creation states', () => {
+    const base = {
+      email: 'operator@example.test',
+      password: 'DevOnly!Password2026',
+      displayName: 'Operador',
+      role: 'operator' as const,
+    };
+    expect(createUserInputSchema.safeParse({...base, status: 'active'}).success).toBe(true);
+    expect(createUserInputSchema.safeParse({...base, status: 'inactive'}).success).toBe(true);
+    expect(createUserInputSchema.safeParse({...base, status: 'pending'}).success).toBe(false);
+    expect(createUserInputSchema.safeParse({...base, status: 'suspended'}).success).toBe(false);
+  });
+
   it('enforces quote item limits and valid client status', () => {
     expect(
       quoteItemInputSchema.safeParse({
@@ -38,5 +51,14 @@ describe('runtime schemas', () => {
       }).success,
     ).toBe(false);
     expect(clientInputSchema.safeParse({name: 'Cliente', status: 'deleted'}).success).toBe(false);
+  });
+
+  it('accepts a valid optional Mexican postal code and rejects malformed values', () => {
+    const base = {name: 'Cliente', status: 'active' as const};
+    expect(clientInputSchema.safeParse({...base, postalCode: '76175'}).success).toBe(true);
+    expect(clientInputSchema.safeParse({...base, postalCode: '7617'}).success).toBe(false);
+    expect(clientInputSchema.safeParse({...base, postalCode: '761750'}).success).toBe(false);
+    expect(clientInputSchema.safeParse({...base, postalCode: '76A75'}).success).toBe(false);
+    expect(clientInputSchema.safeParse(base).success).toBe(true);
   });
 });

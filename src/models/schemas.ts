@@ -3,6 +3,15 @@ import {z} from 'zod';
 const shortText = z.string().trim().min(1).max(120);
 const optionalText = z.string().trim().max(2000).optional();
 const optionalContact = z.string().trim().max(160).optional();
+const optionalPostalCode = z
+  .union([
+    z
+      .string()
+      .trim()
+      .regex(/^\d{5}$/),
+    z.literal(''),
+  ])
+  .optional();
 
 export const emailSchema = z.string().trim().toLowerCase().email().max(254);
 
@@ -15,6 +24,8 @@ export const clientInputSchema = z.object({
   phone: z.string().trim().max(30).optional(),
   status: z.enum(['active', 'inactive']),
   notes: optionalText,
+  addressFull: z.string().trim().max(500).optional(),
+  postalCode: optionalPostalCode,
   billingAddress: z
     .object({
       street: z.string().trim().min(1).max(160),
@@ -23,7 +34,10 @@ export const clientInputSchema = z.object({
       neighborhood: z.string().trim().max(120).optional(),
       city: z.string().trim().min(1).max(100),
       state: z.string().trim().min(1).max(100),
-      postalCode: z.string().trim().min(4).max(10),
+      postalCode: z
+        .string()
+        .trim()
+        .regex(/^\d{5}$/),
       country: z.string().trim().min(1).max(80),
     })
     .optional(),
@@ -38,7 +52,10 @@ export const siteInputSchema = z.object({
     exteriorNumber: z.string().trim().max(20).optional(),
     city: z.string().trim().min(1).max(100),
     state: z.string().trim().min(1).max(100),
-    postalCode: z.string().trim().min(4).max(10),
+    postalCode: z
+      .string()
+      .trim()
+      .regex(/^\d{5}$/),
     country: z.string().trim().min(1).max(80),
   }),
   contactName: optionalContact,
@@ -125,6 +142,8 @@ export const quoteItemInputSchema = z.object({
     .optional(),
 });
 
+export const globalDiscountTypeSchema = z.enum(['none', 'percentage', 'fixed']);
+
 export const catalogItemInputSchema = z.object({
   code: z
     .string()
@@ -151,7 +170,7 @@ export const createUserInputSchema = z.object({
   password: z.string().min(12).max(128),
   displayName: z.string().trim().min(2).max(120),
   role: z.enum(['admin', 'operator']),
-  status: z.enum(['active', 'inactive', 'pending', 'suspended']),
+  status: z.enum(['active', 'inactive']),
 });
 
 export const supportRequestInputSchema = z.object({

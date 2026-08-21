@@ -1,5 +1,8 @@
 import PDFDocument from 'pdfkit';
+import path from 'node:path';
 import type {QuoteDocumentModel} from './quoteDocumentModel';
+
+const DEFAULT_LOGO_PATH = path.resolve(__dirname, '../../assets/enfriamatic-logo-transparent.png');
 
 interface PdfItem {
   quantity: number;
@@ -29,6 +32,9 @@ export interface QuotePdfInput {
   subtotalOriginal: number;
   discountTotal: number;
   subtotalFinal: number;
+  globalDiscountAmount?: number;
+  taxableBase?: number;
+  applyTax?: boolean;
   taxRate: number;
   taxTotal: number;
   grandTotal: number;
@@ -94,15 +100,8 @@ export async function generateQuotePdf(
   const chunks: Buffer[] = [];
   document.on('data', (chunk: Buffer) => chunks.push(chunk));
 
-  if (input.logoPath) {
-    try {
-      document.image(input.logoPath, 44, 38, {fit: [180, 64]});
-    } catch {
-      document.fontSize(18).fillColor('#02557B').text('ENFRIAMATIC', 44, 50);
-    }
-  } else {
-    document.fontSize(18).fillColor('#02557B').text('ENFRIAMATIC', 44, 50);
-  }
+  const logoPath = input.logoPath ?? DEFAULT_LOGO_PATH;
+  document.image(logoPath, 44, 38, {fit: [180, 64]});
 
   document
     .fontSize(9)
@@ -130,31 +129,35 @@ export async function generateQuotePdf(
     .fillColor('#647680')
     .text([input.clientLegalName, input.clientRfc].filter(Boolean).join(' · '), 58, 164)
     .fillColor('#02557B')
-    .text('INSTALACIÓN / EQUIPO', 310, 132)
+    .text(
+      input.operationalMode === 'independent'
+        ? 'REFERENCIA DEL SERVICIO / CONTEXTO TÉCNICO'
+        : 'INSTALACIÓN / EQUIPO',
+      310,
+      132,
+      {width: 240},
+    )
     .fillColor('#17242B')
     .fontSize(10)
-    .text(input.siteName || input.equipmentName || input.serviceReference || '', 310, 146)
+    .text(
+      input.operationalMode === 'independent'
+        ? input.serviceReference || 'Sin referencia'
+        : input.siteName || input.equipmentName || input.serviceReference || '',
+      310,
+      146,
+    )
     .fontSize(8)
     .fillColor('#647680')
-    .text([input.siteAddress, input.equipmentName].filter(Boolean).join(' · '), 310, 163, {
-      width: 240,
-    });
-
-  if (input.operationalMode === 'independent') {
-    document
-      .fillColor('#F4F7F9')
-      .rect(300, 125, 260, 55)
-      .fill()
-      .fillColor('#02557B')
-      .fontSize(8)
-      .text('CONTEXTO OPERATIVO', 310, 132)
-      .fillColor('#17242B')
-      .fontSize(9)
-      .text(input.serviceReference || '', 310, 146)
-      .fillColor('#647680')
-      .fontSize(8)
-      .text(input.technicalContext || '', 310, 160, {width: 240});
-  }
+    .text(
+      input.operationalMode === 'independent'
+        ? input.technicalContext || ''
+        : [input.siteAddress, input.equipmentName].filter(Boolean).join(' · '),
+      310,
+      163,
+      {
+        width: 240,
+      },
+    );
 
   drawTableHeader(document, 220);
   let tableY = document.y;
@@ -216,16 +219,19 @@ export async function generateQuotePdf(
 
   ensureSpace(document, 150);
   const totalsX = 345;
-  const totals = [
-    [
-      'Subtotal',
-      input.discountDisplayMode === 'incorporated' ? input.subtotalFinal : input.subtotalOriginal,
-    ],
-    ...(input.discountDisplayMode === 'summary' && input.discountTotal > 0
-      ? [['Descuento', -input.discountTotal] as [string, number]]
+  const globalDiscountAmount = input.globalDiscountAmount ?? 0;
+  const taxableBase = input.taxableBase ?? input.subtotalFinal - globalDiscountAmount;
+  const totals: Array<[string, number]> = [
+    ['Subtotal original', input.subtotalOriginal],
+    ...(input.discountTotal > 0
+      ? [['Descuentos por partida', -input.discountTotal] as [string, number]]
       : []),
-    [`IVA ${input.taxRate * 100}%`, input.taxTotal],
-  ] as Array<[string, number]>;
+    ...(globalDiscountAmount > 0
+      ? [['Descuento global', -globalDiscountAmount] as [string, number]]
+      : []),
+    ['Base antes de IVA', taxableBase],
+    [input.applyTax === false ? 'IVA no aplica' : `IVA ${input.taxRate * 100}%`, input.taxTotal],
+  ];
   for (const [label, value] of totals) {
     document
       .fillColor('#647680')
@@ -329,6 +335,7 @@ function toPdfInput(source: QuotePdfInput | QuoteDocumentModel): QuotePdfInput {
       })),
       discountDisplayMode: source.terms.discountDisplayMode,
       ...source.totals,
+      applyTax: source.terms.applyTax,
       taxRate: source.terms.taxRate,
       currency: source.identity.currency,
       validityDays: source.identity.validityDays,

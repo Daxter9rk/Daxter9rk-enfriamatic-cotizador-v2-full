@@ -192,7 +192,7 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'name', 'legalName', 'rfc', 'contactName', 'email', 'phone',
-          'billingAddress', 'status', 'notes', 'operatorIds',
+          'billingAddress', 'addressFull', 'postalCode', 'status', 'notes', 'operatorIds',
           'dataOrigin', 'seedVersion', 'seedTag',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
@@ -205,6 +205,9 @@ service cloud.firestore {
         && (!(data.keys().hasAny(['billingAddress']))
           || validAddress(data.billingAddress))
         && validOptionalString(data, 'notes', 2000)
+        && validOptionalString(data, 'addressFull', 500)
+        && (!(data.keys().hasAny(['postalCode'])) || data.postalCode == null
+          || (data.postalCode is string && data.postalCode.matches('^[0-9]{5}$')))
         && data.status in ['active', 'inactive']
         && validOperatorAcl(data)
         && validSeedMetadata(data);
@@ -480,7 +483,18 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     function canReadQuote(data) {
       return isAdmin()
-        || (isOperator() && data.assignedTo == request.auth.uid);
+        || (isOperator() && data.assignedTo == request.auth.uid)
+        || (isOperator()
+          && data.requestId == null
+          && request.auth.uid in get(
+            /databases/$(database)/documents/clients/$(data.clientId)
+          ).data.operatorIds);
+    }
+
+    function canReadIndependentOwnedQuote(data) {
+      return isAdmin()
+        || (isOperator() && data.assignedTo == request.auth.uid)
+        || (isOperator() && data.requestId == null && data.createdBy == request.auth.uid);
     }
 
     function validMoney(value) {
@@ -492,6 +506,7 @@ service cloud.firestore {
           'folio', 'requestId', 'assignedTo', 'clientId', 'siteId',
           'status', 'documentStatus', 'currency', 'taxRate',
           'discountDisplayMode', 'subtotalOriginal', 'discountTotal',
+          'globalDiscountType', 'globalDiscountValue', 'globalDiscountAmount', 'applyTax',
           'subtotalFinal', 'taxTotal', 'grandTotal', 'validityDays',
           'revisionNumber', 'locked',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
@@ -500,6 +515,7 @@ service cloud.firestore {
           'folio', 'requestId', 'assignedTo', 'clientId', 'siteId',
           'equipmentId', 'status', 'documentStatus', 'currency', 'taxRate',
           'discountDisplayMode', 'subtotalOriginal', 'discountTotal',
+          'globalDiscountType', 'globalDiscountValue', 'globalDiscountAmount', 'applyTax',
           'subtotalFinal', 'taxTotal', 'grandTotal', 'notes', 'validityDays',
           'validUntil', 'issuedAt', 'issuedBy', 'originalQuoteId',
           'revisionNumber', 'locked', 'issuanceKey',
@@ -523,6 +539,13 @@ service cloud.firestore {
         && validMoney(data.subtotalOriginal)
         && validMoney(data.discountTotal)
         && validMoney(data.subtotalFinal)
+        && (!(data.keys().hasAny(['globalDiscountType']))
+          || data.globalDiscountType in ['none', 'percentage', 'fixed'])
+        && (!(data.keys().hasAny(['globalDiscountValue']))
+          || validMoney(data.globalDiscountValue))
+        && (!(data.keys().hasAny(['globalDiscountAmount']))
+          || validMoney(data.globalDiscountAmount))
+        && (!(data.keys().hasAny(['applyTax'])) || data.applyTax is bool)
         && validMoney(data.taxTotal)
         && validMoney(data.grandTotal)
         && validOptionalString(data, 'notes', 4000)
@@ -557,6 +580,13 @@ service cloud.firestore {
         && validMoney(data.subtotalOriginal)
         && validMoney(data.discountTotal)
         && validMoney(data.subtotalFinal)
+        && (!(data.keys().hasAny(['globalDiscountType']))
+          || data.globalDiscountType in ['none', 'percentage', 'fixed'])
+        && (!(data.keys().hasAny(['globalDiscountValue']))
+          || validMoney(data.globalDiscountValue))
+        && (!(data.keys().hasAny(['globalDiscountAmount']))
+          || validMoney(data.globalDiscountAmount))
+        && (!(data.keys().hasAny(['applyTax'])) || data.applyTax is bool)
         && validMoney(data.taxTotal)
         && validMoney(data.grandTotal)
         && validOptionalString(data, 'notes', 4000)
@@ -641,7 +671,10 @@ service cloud.firestore {
               isAdmin()
               || (
                 isOperator()
-                && request.resource.data.assignedTo == request.auth.uid
+                && (
+                  request.resource.data.assignedTo == null
+                  || request.resource.data.assignedTo == request.auth.uid
+                )
               )
             )
             && validCreateAudit(request.resource.data)
@@ -759,6 +792,32 @@ service cloud.firestore {
           && selected.taxable == data.catalogSnapshot.taxable;
       }
 
+      // Keep the operator-owned independent draft path below the emulator's
+      // expression budget while preserving the security-critical snapshot
+      // identity, active catalog status, price and taxability checks.
+      function validOperatorCatalogItem(data) {
+        let selected = get(
+          /databases/$(database)/documents/catalogItems/$(data.catalogItemId)
+        ).data;
+        return data.catalogItemId is string
+          && data.catalogItemId == data.catalogCode
+          && exists(/databases/$(database)/documents/catalogItems/$(data.catalogItemId))
+          && selected.status == 'active'
+          && selected.code == data.catalogCode
+          && selected.type == data.catalogType
+          && data.catalogSnapshot is map
+          && data.catalogSnapshot.code == selected.code
+          && data.catalogSnapshot.type == selected.type
+          && data.catalogSnapshot.basePrice == selected.basePrice
+          && data.catalogSnapshot.taxable == selected.taxable
+          && data.quantity is number && data.quantity > 0
+          && data.description is string && data.description.size() > 0
+          && data.originalUnitPrice is number && data.originalUnitPrice >= 0
+          && data.discountType in ['none', 'percentage', 'fixed']
+          && data.createdAt == request.time
+          && data.updatedAt == request.time;
+      }
+
       function editableParentQuote() {
         let quote = get(
           /databases/$(database)/documents/quotes/$(quoteId)
@@ -768,23 +827,42 @@ service cloud.firestore {
           && canReadQuote(quote);
       }
 
+      function editableIndependentOwnedQuote() {
+        let quote = get(
+          /databases/$(database)/documents/quotes/$(quoteId)
+        ).data;
+        return quote.status == 'draft'
+          && quote.locked == false
+          && quote.requestId == null
+          && isOperator()
+          && quote.createdBy == request.auth.uid;
+      }
+
       match /items/{itemId} {
-        allow get: if isActiveUser() && canReadQuote(
+        allow get: if isActiveUser() && canReadIndependentOwnedQuote(
           get(/databases/$(database)/documents/quotes/$(quoteId)).data
         );
         allow list: if isActiveUser()
-          && canReadQuote(
+          && canReadIndependentOwnedQuote(
             get(/databases/$(database)/documents/quotes/$(quoteId)).data
           )
           && boundedList(100);
-        allow create: if editableParentQuote()
-          && validQuoteItem(request.resource.data)
-          && (
-            isManualCatalogSelection(request.resource.data)
-            || validCatalogSelectionOnCreate(request.resource.data)
-          )
-          && request.resource.data.createdAt == request.time
-          && request.resource.data.updatedAt == request.time;
+        allow create: if isOperator()
+          ? (request.resource.data.keys().hasAny([
+              'catalogItemId', 'catalogCode', 'catalogType', 'catalogSnapshot'
+            ])
+            ? ((editableIndependentOwnedQuote() || editableParentQuote())
+              && validOperatorCatalogItem(request.resource.data))
+            : (editableParentQuote()
+              && validQuoteItem(request.resource.data)
+              && request.resource.data.createdAt == request.time
+              && request.resource.data.updatedAt == request.time))
+          : (editableParentQuote()
+            && validQuoteItem(request.resource.data)
+            && (isManualCatalogSelection(request.resource.data)
+              || validCatalogSelectionOnCreate(request.resource.data))
+            && request.resource.data.createdAt == request.time
+            && request.resource.data.updatedAt == request.time);
         allow update: if editableParentQuote()
           && validQuoteItem(request.resource.data)
           && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
@@ -932,13 +1010,14 @@ service cloud.firestore {
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
         && data.keys().hasOnly([
-          'taxRate', 'validityDays', 'currency', 'folioPrefix',
+          'taxRate', 'applyTax', 'validityDays', 'currency', 'folioPrefix',
           'paymentMethod', 'advance', 'estimatedTerm', 'warranty',
           'exclusions', 'observations', 'devWatermark',
           'dataOrigin', 'seedVersion', 'seedTag',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'schemaVersion'
         ])
         && data.taxRate is number && data.taxRate >= 0 && data.taxRate <= 1
+        && (!(data.keys().hasAny(['applyTax'])) || data.applyTax is bool)
         && data.validityDays is int
         && data.validityDays >= 1 && data.validityDays <= 365
         && data.currency == 'MXN'

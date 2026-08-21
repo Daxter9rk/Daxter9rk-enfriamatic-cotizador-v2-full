@@ -67,21 +67,23 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
     .getByRole('link', {name: 'Cotizaciones', exact: true})
     .click();
   await page.getByTestId('new-quote').click();
-  await page.getByTestId('quote-client').selectOption({label: clientName});
+  await page.getByPlaceholder('Buscar por código o nombre...').click();
+  await page.locator('button[role="option"]', {hasText: clientName}).click();
   await page.getByRole('button', {name: 'Crear cotización'}).click();
 
   await page.getByRole('button', {name: 'Agregar Compresor emulador'}).click();
   await page.getByRole('button', {name: 'Agregar Servicio emulador'}).click();
   await page.getByRole('button', {name: 'Editar'}).first().click();
   await page.getByTestId('quote-item-description').fill(`${productName} ajustado en partida`);
-  await page.getByRole('button', {name: 'Guardar cambios de partida'}).click();
+  await page.getByRole('button', {name: 'Guardar cambios'}).click();
   await expect(page.getByRole('button', {name: 'Agregar partida manual'})).toBeVisible();
 
+  await page.getByRole('button', {name: 'Agregar partida'}).click();
   await page.getByTestId('quote-item-description').fill('Diagnóstico técnico manual');
   await page.getByTestId('quote-item-price').fill('2500');
   await page.getByRole('combobox', {name: 'Descuento', exact: true}).selectOption('percentage');
   await page.getByLabel('Valor descuento').fill('10');
-  await page.getByRole('button', {name: 'Agregar partida manual'}).click();
+  await page.getByRole('button', {name: 'Agregar partida'}).click();
   await expect(page.getByText(/\$16,530\.00/)).toBeVisible();
   await page.getByRole('button', {name: 'Vista previa'}).click();
   await expect(page.getByText(/BORRADOR/)).toBeVisible();

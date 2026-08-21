@@ -8,14 +8,14 @@ export const createUserSchema = z.object({
   password: z.string().min(12).max(128),
   displayName: z.string().trim().min(2).max(120),
   role: userRoleSchema,
-  status: userStatusSchema,
+  status: z.enum(['active', 'inactive']),
 });
 
 export const updateUserSchema = z.object({
   uid: z.string().min(1).max(128),
   displayName: z.string().trim().min(2).max(120),
   role: userRoleSchema,
-  status: userStatusSchema,
+  status: z.enum(['active', 'inactive']),
 });
 
 export const issueQuoteSchema = z.object({

@@ -72,4 +72,19 @@ describe('normalizeQuoteRecord', () => {
     expect(quote.siteId).toBe('site-1');
     expect(quote.equipmentId).toBe('equipment-1');
   });
+
+  it('reads an issued historical quote without the new calculation fields', () => {
+    const historical = rawQuote({status: 'issued', locked: true}) as Record<string, unknown>;
+    delete historical.taxRate;
+    const quote = normalizeQuoteRecord(historical as never);
+
+    expect(quote.status).toBe('issued');
+    expect(quote.locked).toBe(true);
+    expect(quote.globalDiscountType).toBeUndefined();
+    expect(quote.globalDiscountValue).toBeUndefined();
+    expect(quote.globalDiscountAmount).toBeUndefined();
+    expect(quote.applyTax).toBeUndefined();
+    expect(quote.taxRate).toBeUndefined();
+    expect(quote.grandTotal).toBe(0);
+  });
 });

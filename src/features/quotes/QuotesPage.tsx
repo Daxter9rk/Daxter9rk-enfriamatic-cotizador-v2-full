@@ -22,6 +22,7 @@ import {
   openDetailSearch,
 } from '../../utils/detailNavigation';
 import {QuoteEditor} from './QuoteEditor';
+import {SearchableSelect} from '../../components/SearchableSelect';
 
 export function QuotesPage() {
   const {profile} = useAuth();
@@ -62,6 +63,10 @@ export function QuotesPage() {
     `${profile?.uid ?? 'admin'}|${statusFilter}|${documentStatusFilter}|${assignmentFilter}|${quoteSearch}|${clientFilter}|${creatorFilter}|${fromDate}|${sort}`,
   );
   const clients = useCollection<Client>('clients', masterDataFilter);
+  const creationClients = useMemo(
+    () => clients.data.filter((client) => client.status === 'active'),
+    [clients.data],
+  );
   const sites = useCollection<Site>('sites', masterDataFilter);
   const equipment = useCollection<Equipment>('equipment', masterDataFilter);
   const catalog = useCollection<CatalogItem>('catalogItems', [constraints.activeOnly()], 100);
@@ -147,28 +152,23 @@ export function QuotesPage() {
     try {
       const form = new FormData(event.currentTarget);
       const clientId = String(form.get('clientId') ?? '');
-      const assignedTo = String(form.get('assignedTo') ?? '').trim() || null;
       const draft = createQuoteDraft({
         actorId: profile.uid,
         actorRole: profile.role,
         clientId,
         requestId: null,
-        assignedTo,
+        assignedTo: null,
         siteId: null,
         equipmentId: null,
-        serviceReference: String(form.get('serviceReference') ?? ''),
-        technicalContext: String(form.get('technicalContext') ?? ''),
       });
       const id = await createQuoteRecord({
         actorId: profile.uid,
         actorRole: profile.role,
         clientId: draft.clientId,
         requestId: null,
-        assignedTo: draft.assignedTo,
+        assignedTo: null,
         siteId: null,
         equipmentId: null,
-        serviceReference: draft.serviceReference ?? null,
-        technicalContext: draft.technicalContext ?? null,
       });
       setCreating(false);
       await quotes.reload();
@@ -396,57 +396,27 @@ export function QuotesPage() {
         <Modal title="Nueva cotización" onClose={() => setCreating(false)}>
           <QuoteCreationGuide />
           <form className="form-grid" onSubmit={(event) => void createQuote(event)}>
-            <label className="field-wide">
-              Cliente
-              <select
-                name="clientId"
-                required
-                data-testid="quote-client"
-                value={creationClientId}
-                onChange={(event) => setCreationClientId(event.target.value)}
-              >
-                <option value="">Selecciona</option>
-                {clients.data.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <section
-              className="field-wide quote-link-summary"
-              aria-label="Cotización independiente"
-            >
-              <strong>Cotización independiente</strong>
-              <span>Se guardará con contexto técnico y sin vínculos operativos históricos.</span>
-            </section>
-            <label>
-              Referencia de servicio (opcional)
-              <input name="serviceReference" maxLength={500} />
-            </label>
-            <label>
-              Contexto tÃ©cnico (opcional)
-              <textarea name="technicalContext" maxLength={2000} />
-            </label>
-            {profile?.role === 'admin' && (
-              <label>
-                Operador asignado (opcional)
-                <select name="assignedTo">
-                  <option value="">Sin asignar</option>
-                  {users.data
-                    .filter((user) => user.role === 'operator' && user.status === 'active')
-                    .map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.displayName}
-                      </option>
-                    ))}
-                </select>
-              </label>
-            )}
+            <SearchableSelect
+              name="clientId"
+              label="Cliente"
+              required
+              loading={clients.loading}
+              value={creationClientId}
+              onChange={setCreationClientId}
+              placeholder="Buscar por código o nombre..."
+              options={creationClients.map((client) => ({
+                value: client.id,
+                label: client.name,
+                keywords: [client.legalName, client.rfc, client.id].filter(Boolean).join(' '),
+              }))}
+            />
+            <p className="form-hint field-wide">
+              Emitida por: {profile?.displayName ?? 'Usuario autenticado'}
+            </p>
             {message && <p className="form-message form-message--error field-wide">{message}</p>}
             <button
               className="button button--primary field-wide"
-              disabled={busy || clients.data.length === 0}
+              disabled={busy || creationClients.length === 0}
             >
               {busy ? 'Creando…' : 'Crear cotización'}
             </button>
@@ -515,16 +485,6 @@ function QuoteCreationGuide() {
       </li>
       <li>
         <span>2</span>
-        <strong>Referencia de servicio</strong>
-        <small>Texto opcional para identificar el trabajo</small>
-      </li>
-      <li>
-        <span>3</span>
-        <strong>Contexto técnico</strong>
-        <small>Texto opcional para orientar la propuesta</small>
-      </li>
-      <li>
-        <span>4</span>
         <strong>Partidas</strong>
         <small>Se agregan después de guardar el borrador</small>
       </li>

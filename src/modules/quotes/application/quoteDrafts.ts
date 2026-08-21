@@ -29,6 +29,10 @@ export interface QuoteDraftWrite {
   subtotalOriginal: 0;
   discountTotal: 0;
   subtotalFinal: 0;
+  globalDiscountType: 'none';
+  globalDiscountValue: 0;
+  globalDiscountAmount: 0;
+  applyTax: true;
   taxTotal: 0;
   grandTotal: 0;
   notes: null;
@@ -50,11 +54,9 @@ export function createQuoteDraft(input: CreateQuoteDraftInput): QuoteDraftWrite 
   const clientId = input.clientId.trim();
   const requestId = clean(input.requestId);
   if (!clientId) throw new Error('El cliente es obligatorio.');
-  const assignedTo =
-    clean(input.assignedTo) ?? (input.actorRole === 'operator' ? input.actorId : null);
-  if (input.actorRole === 'operator' && assignedTo !== input.actorId) {
-    throw new Error('El operador debe quedar asignado a sí mismo.');
-  }
+  const assignedTo = requestId
+    ? (clean(input.assignedTo) ?? (input.actorRole === 'operator' ? input.actorId : null))
+    : null;
   return {
     folio: '',
     requestId,
@@ -76,6 +78,10 @@ export function createQuoteDraft(input: CreateQuoteDraftInput): QuoteDraftWrite 
     subtotalOriginal: 0,
     discountTotal: 0,
     subtotalFinal: 0,
+    globalDiscountType: 'none',
+    globalDiscountValue: 0,
+    globalDiscountAmount: 0,
+    applyTax: true,
     taxTotal: 0,
     grandTotal: 0,
     notes: null,

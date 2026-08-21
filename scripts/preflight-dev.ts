@@ -2,6 +2,7 @@ import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import {DEV_PROJECT_ID} from './dev-seed-core';
+import {loadPreflightEnv, missingEnvironmentVariables} from './preflight-dev-env';
 import {runProcess} from './portable-process';
 
 const expectedRoot = 'enfriamatic-cotizador-v2-full';
@@ -39,14 +40,8 @@ if (!runProcess('gcloud', ['auth', 'list', '--filter=status:ACTIVE', '--format=v
   throw new Error('gcloud no está autenticado.');
 runProcess('gh', ['auth', 'status']);
 
-const envPath = path.join(root, '.env.local');
-const envText = readFileSync(envPath, 'utf8');
-const envEntries: Record<string, string> = {};
-for (const line of envText.split(/\r?\n/).filter((item) => item.includes('='))) {
-  const [key, value = ''] = line.split(/=(.*)/s).slice(0, 2);
-  if (key) envEntries[key] = value;
-}
-const missing = requiredEnv.filter((key) => !envEntries[key]);
+const envEntries = loadPreflightEnv(root, process.env);
+const missing = missingEnvironmentVariables(envEntries, requiredEnv);
 if (missing.length > 0) throw new Error(`Faltan variables Firebase: ${missing.join(', ')}.`);
 if (envEntries.VITE_FIREBASE_PROJECT_ID !== DEV_PROJECT_ID)
   throw new Error('VITE_FIREBASE_PROJECT_ID no coincide con DEV autorizado.');

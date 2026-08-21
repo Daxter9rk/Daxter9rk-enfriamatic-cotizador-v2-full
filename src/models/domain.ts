@@ -61,6 +61,8 @@ export interface Client extends AuditFields {
   email?: string;
   phone?: string;
   billingAddress?: Address;
+  addressFull?: string;
+  postalCode?: string;
   status: 'active' | 'inactive';
   notes?: string;
 }
@@ -188,6 +190,10 @@ export interface Quote extends AuditFields {
   subtotalOriginal: number;
   discountTotal: number;
   subtotalFinal: number;
+  globalDiscountType?: 'none' | 'percentage' | 'fixed';
+  globalDiscountValue?: number;
+  globalDiscountAmount?: number;
+  applyTax?: boolean;
   taxTotal: number;
   grandTotal: number;
   notes?: string | null;

@@ -36,7 +36,9 @@ export function UsersPage() {
     const term = search.trim().toLowerCase();
     return users.data.filter((user) =>
       [user.displayName, user.email, user.role, user.status].some((field) =>
-        field.toLowerCase().includes(term),
+        String(field ?? '')
+          .toLowerCase()
+          .includes(term),
       ),
     );
   }, [search, users.data]);
@@ -50,7 +52,7 @@ export function UsersPage() {
       setCreating(false);
       await users.reload();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo crear el usuario.');
+      setMessage(userActionErrorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -85,7 +87,7 @@ export function UsersPage() {
       setEditing(null);
       await Promise.all([users.reload(), refreshProfile()]);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo actualizar el usuario.');
+      setMessage(userActionErrorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -190,7 +192,7 @@ export function UsersPage() {
                     <td>
                       <strong>{user.displayName}</strong>
                       {user.isPrimaryAdmin && (
-                        <span className="badge badge--primary">Principal</span>
+                        <span className="badge badge--primary">ADMINISTRADOR PRINCIPAL</span>
                       )}
                     </td>
                     <td>{user.email}</td>
@@ -252,6 +254,9 @@ export function UsersPage() {
       {editing && (
         <Modal title={`Administrar a ${editing.displayName}`} onClose={() => setEditing(null)}>
           <form className="form-grid" onSubmit={update}>
+            {editing.isPrimaryAdmin && (
+              <span className="badge badge--primary field-wide">ADMINISTRADOR PRINCIPAL</span>
+            )}
             <label className="field-wide">
               Nombre
               <input
@@ -273,8 +278,8 @@ export function UsersPage() {
               canChangeStatus={!editing.isPrimaryAdmin && editing.uid !== profile?.uid}
             />
             {editing.isPrimaryAdmin && (
-              <p className="form-message field-wide">
-                La cuenta principal no puede desactivarse ni degradarse.
+              <p className="notice notice--warning field-wide" role="status">
+                Esta es la cuenta del administrador principal. Su rol y estado están protegidos.
               </p>
             )}
             {message && <p className="form-message form-message--error field-wide">{message}</p>}
@@ -321,13 +326,27 @@ function UserControls({
       </label>
       <label>
         Estado
-        <select name="status" defaultValue={status} disabled={!canChangeStatus}>
+        <select
+          name="status"
+          defaultValue={status === 'active' || status === 'inactive' ? status : ''}
+          disabled={!canChangeStatus}
+          required
+        >
+          {!['active', 'inactive'].includes(status) && (
+            <option value="">Selecciona un estado administrativo</option>
+          )}
           <option value="active">Activo</option>
           <option value="inactive">Inactivo</option>
-          <option value="pending">Pendiente</option>
-          <option value="suspended">Suspendido</option>
         </select>
-        {!canChangeStatus && <input type="hidden" name="status" value={status} />}
+        {!canChangeStatus && (
+          <input name="status" type="hidden" value={status === 'active' ? 'active' : 'inactive'} />
+        )}
+        {!['active', 'inactive'].includes(status) && (
+          <small className="field-help field-wide">
+            Estado técnico histórico: {statusLabel(status)}. No se muestra como opción
+            administrativa.
+          </small>
+        )}
       </label>
     </>
   );
@@ -338,7 +357,29 @@ function roleLabel(role: UserRole): string {
 }
 
 function statusLabel(status: UserStatus): string {
-  return {active: 'Activo', inactive: 'Inactivo', pending: 'Pendiente', suspended: 'Suspendido'}[
-    status
-  ];
+  return (
+    {active: 'Activo', inactive: 'Inactivo', pending: 'Pendiente', suspended: 'Suspendido'}[
+      status
+    ] ?? 'Estado técnico'
+  );
+}
+
+function userActionErrorMessage(error: unknown): string {
+  const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
+  const details =
+    error && typeof error === 'object' && 'details' in error
+      ? (error as {details?: {reason?: unknown}}).details
+      : undefined;
+  const reason = typeof details?.reason === 'string' ? details.reason : '';
+  if (reason === 'primary-protected') return 'El administrador principal no puede modificarse.';
+  if (reason === 'self-role-status') return 'No puedes cambiar tu propio rol o estado.';
+  if (reason === 'primary-required') return 'Sólo el administrador principal puede cambiar roles.';
+  if (reason === 'admin-target-protected')
+    return 'Sólo el administrador principal puede administrar administradores.';
+  if (reason === 'last-active-admin') return 'Debe permanecer al menos un administrador activo.';
+  if (code === 'functions/invalid-argument') return 'El rol o estado seleccionado no es válido.';
+  if (code === 'functions/permission-denied')
+    return 'No tienes permisos para administrar este usuario.';
+  if (code === 'functions/not-found') return 'El usuario ya no existe.';
+  return 'No fue posible guardar el usuario. Inténtalo nuevamente.';
 }

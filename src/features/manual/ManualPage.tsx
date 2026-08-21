@@ -1,74 +1,81 @@
-import {useMemo, useState} from 'react';
 import {useAuth} from '../../app/providers/AuthProvider';
 import {PageHeader} from '../../components/PageHeader';
-import {administratorManual, operatorManual} from '../../content/manuals';
+
+const manuals = [
+  {
+    key: 'administrador',
+    title: 'Manual del administrador',
+    description: 'Gestión de clientes, catálogo, usuarios, cotizaciones y configuración.',
+    audience: 'Administrador',
+    file: '/manuales/manual-administrador-v2.1.pdf',
+  },
+  {
+    key: 'operador',
+    title: 'Manual del operador',
+    description: 'Operación diaria de cotizaciones, catálogo de consulta y documentos PDF.',
+    audience: 'Operador',
+    file: '/manuales/manual-operador-v2.1.pdf',
+  },
+  {
+    key: 'general',
+    title: 'Manual general de la plataforma',
+    description: 'Conceptos comunes, sesión, flujo comercial y buenas prácticas de V2.1.',
+    audience: 'Todos los perfiles',
+    file: '/manuales/manual-general-enfriamatic-v2-1.pdf',
+  },
+] as const;
 
 export function ManualPage() {
   const {profile} = useAuth();
-  const [search, setSearch] = useState('');
-  const sections = profile?.role === 'admin' ? administratorManual : operatorManual;
-  const roleLabel = profile?.role === 'admin' ? 'administrador' : 'operador';
-  const visible = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase('es-MX');
-    if (!term) return sections;
-    return sections.filter((section) =>
-      [section.title, section.summary, ...section.steps]
-        .join(' ')
-        .toLocaleLowerCase('es-MX')
-        .includes(term),
-    );
-  }, [search, sections]);
+  const visibleManuals =
+    profile?.role === 'admin'
+      ? manuals
+      : manuals.filter((manual) => manual.key !== 'administrador');
   return (
     <>
       <PageHeader
         eyebrow="Ayuda operativa"
-        title={`Manual de ${roleLabel}`}
-        description="Procedimientos completos, restricciones y recuperación para operar con seguridad."
+        title="Biblioteca de manuales"
+        description="Documentación vigente de Enfriamatic Cotizador V2.1."
       />
-      <p className="manual-version">
-        <strong>Enfriamatic Cotizador V2.1</strong> · Manual vigente para entorno DEV
-      </p>
-      <label className="search-field manual-search">
-        Buscar en el manual
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Ej. PDF, corrección, catálogo…"
-        />
-      </label>
-      {!search && (
-        <nav className="manual-index" aria-label="Índice del manual">
-          {sections.map((section, index) => (
-            <a key={section.title} href={`#manual-${index + 1}`}>
-              {index + 1}. {section.title}
-            </a>
-          ))}
-        </nav>
-      )}
-      <section className="manual-grid" aria-label={`${visible.length} temas del manual`}>
-        {visible.map((section, index) => (
-          <details
-            id={`manual-${sections.indexOf(section) + 1}`}
-            key={section.title}
-            open={index === 0 && !search}
-          >
-            <summary>
-              <span>{String(index + 1).padStart(2, '0')}</span>
-              <strong>{section.title}</strong>
-            </summary>
-            <p>{section.summary}</p>
-            <ol>
-              {section.steps.map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ol>
-          </details>
+      <section className="manual-library" aria-label="Manuales disponibles">
+        {visibleManuals.map((manual) => (
+          <article className="manual-card" key={manual.key}>
+            <div className="manual-card__cover" aria-hidden="true">
+              V2.1
+            </div>
+            <div className="manual-card__body">
+              <p className="eyebrow">{manual.audience}</p>
+              <h2>{manual.title}</h2>
+              <p>{manual.description}</p>
+              <dl>
+                <div>
+                  <dt>Versión</dt>
+                  <dd>V2.1</dd>
+                </div>
+                <div>
+                  <dt>Actualización</dt>
+                  <dd>Agosto 2026</dd>
+                </div>
+              </dl>
+              <div className="button-row">
+                <a
+                  className="button button--primary"
+                  href={manual.file}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Ver manual
+                </a>
+                <a className="button button--ghost" href={manual.file} download>
+                  Descargar PDF
+                </a>
+              </div>
+            </div>
+          </article>
         ))}
       </section>
-      {visible.length === 0 && (
-        <p className="empty-copy">No hay temas que coincidan con la búsqueda.</p>
-      )}
+      <p className="form-hint">Sesión activa: {profile?.displayName ?? 'Usuario autenticado'}</p>
     </>
   );
 }

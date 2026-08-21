@@ -8,6 +8,8 @@ export interface QuoteClientSnapshot {
   contactName: string | null;
   email: string | null;
   phone: string | null;
+  addressFull: string | null;
+  postalCode: string | null;
   billingAddress: Record<string, string> | null;
 }
 
@@ -63,6 +65,10 @@ export interface QuoteDocumentModel {
   totals: QuoteTotals;
   terms: {
     taxRate: number;
+    applyTax: boolean;
+    globalDiscountType: 'none' | 'percentage' | 'fixed';
+    globalDiscountValue: number;
+    globalDiscountAmount: number;
     discountDisplayMode: 'detailed' | 'summary' | 'incorporated';
     notes: string | null;
   };
@@ -110,6 +116,13 @@ export function buildQuoteDocumentModel(input: {
   const independent = requestId === null;
   const validityDays = Number(input.quote.validityDays ?? input.defaults.validityDays ?? 15);
   const taxRate = Number(input.quote.taxRate ?? input.defaults.taxRate ?? 0.16);
+  const applyTax = typeof input.quote.applyTax === 'boolean' ? input.quote.applyTax : true;
+  const globalDiscountType =
+    input.quote.globalDiscountType === 'percentage' || input.quote.globalDiscountType === 'fixed'
+      ? input.quote.globalDiscountType
+      : 'none';
+  const globalDiscountValue = Number(input.quote.globalDiscountValue ?? 0);
+  const globalDiscountAmount = Number(input.quote.globalDiscountAmount ?? 0);
   const request = input.request ?? {};
   const site = input.site ?? {};
   const equipment = input.equipment ?? {};
@@ -140,6 +153,8 @@ export function buildQuoteDocumentModel(input: {
       contactName: text(input.client.contactName),
       email: text(input.client.email),
       phone: text(input.client.phone),
+      addressFull: text(input.client.addressFull),
+      postalCode: text(input.client.postalCode),
       billingAddress: addressSnapshot(input.client.billingAddress),
     },
     company: {
@@ -166,6 +181,10 @@ export function buildQuoteDocumentModel(input: {
     totals: input.totals,
     terms: {
       taxRate,
+      applyTax,
+      globalDiscountType,
+      globalDiscountValue,
+      globalDiscountAmount,
       discountDisplayMode:
         input.quote.discountDisplayMode === 'summary' ||
         input.quote.discountDisplayMode === 'incorporated'

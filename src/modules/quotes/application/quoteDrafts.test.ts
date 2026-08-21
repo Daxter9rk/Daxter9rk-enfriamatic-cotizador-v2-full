@@ -24,21 +24,13 @@ describe('quote draft application use cases', () => {
     expect(draft.equipmentId).toBeNull();
   });
 
-  it('auto-assigns an independent operator draft and rejects another assignee', () => {
+  it('does not assign an independent draft to an operator', () => {
     const draft = createQuoteDraft({
       clientId: 'client-1',
       actorId: 'operator-1',
       actorRole: 'operator',
     });
-    expect(draft.assignedTo).toBe('operator-1');
-    expect(() =>
-      createQuoteDraft({
-        clientId: 'client-1',
-        actorId: 'operator-1',
-        actorRole: 'operator',
-        assignedTo: 'operator-2',
-      }),
-    ).toThrow();
+    expect(draft.assignedTo).toBeNull();
   });
 
   it('updates only an editable draft for its assigned operator', () => {
