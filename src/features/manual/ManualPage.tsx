@@ -27,6 +27,10 @@ const manuals = [
 
 export function ManualPage() {
   const {profile} = useAuth();
+  const visibleManuals =
+    profile?.role === 'admin'
+      ? manuals
+      : manuals.filter((manual) => manual.key !== 'administrador');
   return (
     <>
       <PageHeader
@@ -35,7 +39,7 @@ export function ManualPage() {
         description="Documentación vigente de Enfriamatic Cotizador V2.1."
       />
       <section className="manual-library" aria-label="Manuales disponibles">
-        {manuals.map((manual) => (
+        {visibleManuals.map((manual) => (
           <article className="manual-card" key={manual.key}>
             <div className="manual-card__cover" aria-hidden="true">
               V2.1

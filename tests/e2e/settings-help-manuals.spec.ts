@@ -51,6 +51,16 @@ test('operator cannot open settings and receives the manual library', async ({pa
   await page.goto('/manual', {waitUntil: 'domcontentloaded'});
   await expect(page.getByRole('heading', {name: /biblioteca de manuales/i})).toBeVisible();
   await expect(page.getByRole('heading', {name: /manual del operador/i})).toBeVisible();
+  await expect(page.getByRole('heading', {name: /manual del administrador/i})).toHaveCount(0);
+  await expect(page.getByRole('link', {name: /descargar pdf/i})).toHaveCount(2);
+});
+
+test('admin sees the three manuals', async ({page}) => {
+  await login(page, 'admin@enfriamatic.local');
+  await page.goto('/manual', {waitUntil: 'domcontentloaded'});
+  await expect(page.getByRole('heading', {name: /manual del administrador/i})).toBeVisible();
+  await expect(page.getByRole('heading', {name: /manual del operador/i})).toBeVisible();
+  await expect(page.getByRole('heading', {name: /manual general/i})).toBeVisible();
   await expect(page.getByRole('link', {name: /descargar pdf/i})).toHaveCount(3);
 });
 

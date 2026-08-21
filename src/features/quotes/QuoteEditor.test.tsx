@@ -181,6 +181,9 @@ describe('quote editor phase two interactions', () => {
     await user.click(await screen.findByRole('button', {name: 'Vista previa'}));
 
     const preview = screen.getByRole('dialog', {name: 'Vista previa'});
+    const closeButton = screen.getByRole('button', {name: 'Cerrar vista previa'});
+    expect(closeButton.parentElement).toHaveClass('preview-overlay__toolbar');
+    expect(closeButton.closest('.quote-preview')).toBeNull();
     expect(preview).toHaveTextContent('Descuento global');
     expect(preview).toHaveTextContent('IVA global (16%)');
 

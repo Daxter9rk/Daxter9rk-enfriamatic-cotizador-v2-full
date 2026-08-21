@@ -1536,17 +1536,23 @@ th {
   padding: 4rem 1rem;
   background: rgb(10 25 32 / 82%);
 }
-.preview-overlay > button {
+.preview-overlay__toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  width: min(816px, calc(100vw - 48px));
+  min-height: 42px;
+  margin: 0 auto -42px;
+  pointer-events: none;
+}
+.preview-overlay__close {
   color: white;
+  pointer-events: auto;
 }
 .quote-preview__header {
   position: relative;
-}
-.quote-preview__close {
-  position: absolute;
-  top: -0.8rem;
-  right: -0.8rem;
-  color: var(--ink);
 }
 .quote-context-form > label {
   min-width: 0;
@@ -1961,7 +1967,8 @@ th {
   color: var(--ink);
 }
 .searchable-select__options button:hover,
-.searchable-select__options button[aria-selected='true'] {
+.searchable-select__options button[aria-selected='true'],
+.searchable-select__options button.is-active {
   background: #edf7fb;
   color: var(--blue-900);
 }

@@ -1,4 +1,4 @@
-import {render, screen} from '@testing-library/react';
+import {cleanup, render, screen} from '@testing-library/react';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {ManualPage} from './ManualPage';
 
@@ -7,6 +7,7 @@ vi.mock('../../app/providers/AuthProvider', () => ({useAuth: () => auth}));
 
 describe('ManualPage', () => {
   beforeEach(() => {
+    cleanup();
     auth.profile.role = 'admin';
   });
   it('muestra la biblioteca completa de manuales', () => {
@@ -21,5 +22,7 @@ describe('ManualPage', () => {
     auth.profile.role = 'operator';
     render(<ManualPage />);
     expect(screen.getAllByText(/sesión activa/i).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('heading', {name: /manual del administrador/i})).toBeNull();
+    expect(screen.getAllByRole('link', {name: /descargar pdf/i})).toHaveLength(2);
   });
 });

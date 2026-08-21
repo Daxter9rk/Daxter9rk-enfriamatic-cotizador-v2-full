@@ -1007,21 +1007,21 @@ function Preview({
         }
       }}
     >
+      <div className="preview-overlay__toolbar">
+        <button
+          ref={closeButtonRef}
+          className="icon-button preview-overlay__close"
+          aria-label="Cerrar vista previa"
+          onClick={onClose}
+        >
+          ×
+        </button>
+      </div>
       <section className="quote-preview-pages" aria-label="Vista previa del documento">
         {pages.map((pageItems, pageIndex) => (
           <article className="quote-preview" key={pageIndex}>
             <span className="quote-preview__watermark">DOCUMENTO DE PRUEBA DEV</span>
             <header className="quote-preview__header">
-              {pageIndex === 0 && (
-                <button
-                  ref={closeButtonRef}
-                  className="icon-button quote-preview__close"
-                  aria-label="Cerrar vista previa"
-                  onClick={onClose}
-                >
-                  ×
-                </button>
-              )}
               <div>
                 <img className="quote-preview__logo" src={logoUrl} alt="Enfriamatic" />
                 <small>Cotizador V2.1</small>

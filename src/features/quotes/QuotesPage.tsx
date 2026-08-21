@@ -400,6 +400,7 @@ export function QuotesPage() {
               name="clientId"
               label="Cliente"
               required
+              loading={clients.loading}
               value={creationClientId}
               onChange={setCreationClientId}
               placeholder="Buscar por código o nombre..."

@@ -37,8 +37,15 @@ async function openIndependentQuote(page: Page) {
 
   await page.getByTestId('new-quote').click();
 
-  await page.getByPlaceholder('Buscar por código o nombre...').click();
-  await page.locator('button[role="option"]', {hasText: 'Procesos Fríos del Bajío'}).click();
+  const clientSearch = page.getByPlaceholder('Buscar por código o nombre...');
+  await clientSearch.fill('procesos');
+  const creationDialog = page.getByRole('dialog', {name: 'Nueva cotización'});
+  await expect(
+    creationDialog.getByRole('option', {name: 'Procesos Fríos del Bajío'}),
+  ).toBeVisible();
+  await creationDialog
+    .locator('button[role="option"]', {hasText: 'Procesos Fríos del Bajío'})
+    .click();
 
   await expect(page.locator('select[name="siteId"]')).toHaveCount(0);
   await expect(page.locator('select[name="equipmentId"]')).toHaveCount(0);
@@ -71,6 +78,11 @@ test('admin creates, edits, previews and reloads an independent quote', async ({
   const initialPreviewDialog = getPreviewDialog(page);
 
   await expect(initialPreviewDialog).toContainText('Procesos Fríos del Bajío');
+  await expect(initialPreviewDialog.locator('.preview-overlay__toolbar')).toHaveCount(1);
+  await expect(initialPreviewDialog.locator('.preview-overlay__toolbar button')).toHaveCount(1);
+  await expect(initialPreviewDialog.locator('.quote-preview .preview-overlay__close')).toHaveCount(
+    0,
+  );
 
   await page.getByRole('button', {name: 'Cerrar vista previa'}).click();
 
