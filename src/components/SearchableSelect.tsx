@@ -28,6 +28,8 @@ export function SearchableSelect({
   const selected = options.find((option) => option.value === value);
   const [query, setQuery] = useState(selected?.label ?? '');
   const [open, setOpen] = useState(false);
+  const listboxId = `${name}-options`;
+  const inputId = `${name}-search`;
   const keepTypedQuery = useRef(false);
   useEffect(() => {
     if (keepTypedQuery.current && value === '') {
@@ -54,10 +56,12 @@ export function SearchableSelect({
   };
 
   return (
-    <label className="searchable-select">
+    <label className="searchable-select" htmlFor={inputId}>
       {label}
       <input type="hidden" name={name} value={value} />
       <input
+        id={inputId}
+        data-testid={name}
         type="search"
         value={query}
         required={required}
@@ -65,6 +69,8 @@ export function SearchableSelect({
         placeholder={placeholder}
         autoComplete="off"
         aria-autocomplete="list"
+        aria-controls={listboxId}
+        aria-haspopup="listbox"
         aria-expanded={open}
         onFocus={() => setOpen(true)}
         onChange={(event) => {
@@ -75,9 +81,16 @@ export function SearchableSelect({
             onChange?.('');
           }
         }}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') setOpen(false);
+          if (event.key === 'Enter' && open && visible[0]) {
+            event.preventDefault();
+            choose(visible[0]);
+          }
+        }}
       />
       {open && !disabled && (
-        <span className="searchable-select__options" role="listbox">
+        <span id={listboxId} className="searchable-select__options" role="listbox">
           {visible.length === 0 ? (
             <span className="searchable-select__empty">Sin coincidencias</span>
           ) : (

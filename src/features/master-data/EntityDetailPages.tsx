@@ -1,5 +1,5 @@
 import {useEffect, useMemo, useRef, useState, type FormEvent} from 'react';
-import {Link} from 'wouter';
+import {Link, useLocation} from 'wouter';
 import {useAuth} from '../../app/providers/AuthProvider';
 import {Icon} from '../../components/Icon';
 import {Modal} from '../../components/Modal';
@@ -36,6 +36,7 @@ type DeleteClientDialogState =
 export function ClientDetailPage({clientId}: {clientId: string}) {
   const {profile} = useAuth();
   const client = useDocument<Client>('clients', clientId);
+  const [, navigate] = useLocation();
   const related = useMemo(() => [constraints.byClient(clientId)], [clientId]);
   const sites = useCollection<Site>('sites', related, 50);
   const equipment = useCollection<Equipment>('equipment', related, 50);
@@ -68,7 +69,11 @@ export function ClientDetailPage({clientId}: {clientId: string}) {
             ? 'El cliente ya no existe.'
             : 'Cliente eliminado permanentemente.',
         );
-        client.reload();
+        sessionStorage.setItem(
+          'enfriamatic:client-action-notice',
+          'Cliente eliminado permanentemente.',
+        );
+        void navigate('/clients');
       }
     } catch (error) {
       setDialog('error');
@@ -84,7 +89,11 @@ export function ClientDetailPage({clientId}: {clientId: string}) {
       await updateDocument('clients', client.data.id, {status: 'inactive'}, profile.uid);
       setDialog(null);
       setActionNotice('Cliente desactivado. Ya no aparecerá en nuevas cotizaciones.');
-      client.reload();
+      sessionStorage.setItem(
+        'enfriamatic:client-action-notice',
+        'Cliente desactivado. Ya no aparecerá en nuevas cotizaciones.',
+      );
+      void navigate('/clients');
     } catch (error) {
       setDialog('error');
       setActionError(formatClientActionError(error));

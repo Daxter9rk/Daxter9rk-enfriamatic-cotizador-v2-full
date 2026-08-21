@@ -54,11 +54,9 @@ export function createQuoteDraft(input: CreateQuoteDraftInput): QuoteDraftWrite 
   const clientId = input.clientId.trim();
   const requestId = clean(input.requestId);
   if (!clientId) throw new Error('El cliente es obligatorio.');
-  const assignedTo =
-    clean(input.assignedTo) ?? (input.actorRole === 'operator' ? input.actorId : null);
-  if (input.actorRole === 'operator' && assignedTo !== input.actorId) {
-    throw new Error('El operador debe quedar asignado a sí mismo.');
-  }
+  const assignedTo = requestId
+    ? (clean(input.assignedTo) ?? (input.actorRole === 'operator' ? input.actorId : null))
+    : null;
   return {
     folio: '',
     requestId,

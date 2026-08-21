@@ -331,6 +331,7 @@ export const issueQuote = onCall(
         quoteId,
         code,
         stage,
+        errorMessage: error instanceof Error ? error.message : String(error),
         durationMs: Date.now() - startedAt,
       });
       if (reserved) {
@@ -394,13 +395,13 @@ async function prepareQuote(
   const quoteSnapshot = await firestore.doc(`quotes/${quoteId}`).get();
   if (!quoteSnapshot.exists) throw new HttpsError('not-found', 'The quote does not exist.');
   const quote = quoteSnapshot.data() ?? {};
-  if (role === 'operator' && quote.assignedTo !== actorId) {
-    throw new HttpsError('permission-denied', 'The quote is not assigned to this operator.');
-  }
   if (quote.status !== 'draft' || quote.locked === true) {
     throw new HttpsError('failed-precondition', 'Only unlocked drafts can be issued.');
   }
   const requestId = asNullableString(quote.requestId);
+  if (role === 'operator' && requestId && quote.assignedTo !== actorId) {
+    throw new HttpsError('permission-denied', 'The quote is not assigned to this operator.');
+  }
   if (!requestId && (quote.siteId != null || quote.equipmentId != null)) {
     throw new HttpsError(
       'failed-precondition',
@@ -506,7 +507,7 @@ async function prepareQuote(
         throw new HttpsError('failed-precondition', 'The related equipment does not exist.');
       equipmentData = equipment.data() ?? {};
     }
-  } else if (role === 'operator' && quote.assignedTo !== actorId) {
+  } else if (role === 'operator' && quote.assignedTo != null && quote.assignedTo !== actorId) {
     throw new HttpsError('permission-denied', 'The quote is not assigned to this operator.');
   }
   return {

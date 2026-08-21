@@ -22,6 +22,7 @@ import {
   openDetailSearch,
 } from '../../utils/detailNavigation';
 import {QuoteEditor} from './QuoteEditor';
+import {SearchableSelect} from '../../components/SearchableSelect';
 
 export function QuotesPage() {
   const {profile} = useAuth();
@@ -151,13 +152,12 @@ export function QuotesPage() {
     try {
       const form = new FormData(event.currentTarget);
       const clientId = String(form.get('clientId') ?? '');
-      const assignedTo = String(form.get('assignedTo') ?? '').trim() || null;
       const draft = createQuoteDraft({
         actorId: profile.uid,
         actorRole: profile.role,
         clientId,
         requestId: null,
-        assignedTo,
+        assignedTo: null,
         siteId: null,
         equipmentId: null,
       });
@@ -166,7 +166,7 @@ export function QuotesPage() {
         actorRole: profile.role,
         clientId: draft.clientId,
         requestId: null,
-        assignedTo: draft.assignedTo,
+        assignedTo: null,
         siteId: null,
         equipmentId: null,
       });
@@ -396,38 +396,38 @@ export function QuotesPage() {
         <Modal title="Nueva cotización" onClose={() => setCreating(false)}>
           <QuoteCreationGuide />
           <form className="form-grid" onSubmit={(event) => void createQuote(event)}>
-            <label className="field-wide">
-              Cliente
-              <select
-                name="clientId"
-                required
-                data-testid="quote-client"
-                value={creationClientId}
-                onChange={(event) => setCreationClientId(event.target.value)}
-              >
-                <option value="">Selecciona</option>
-                {creationClients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {profile?.role === 'admin' && (
-              <label>
-                Operador asignado (opcional)
-                <select name="assignedTo">
-                  <option value="">Sin asignar</option>
-                  {users.data
-                    .filter((user) => user.role === 'operator' && user.status === 'active')
-                    .map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.displayName}
-                      </option>
-                    ))}
-                </select>
-              </label>
-            )}
+            <SearchableSelect
+              name="clientId"
+              label="Cliente"
+              required
+              value={creationClientId}
+              onChange={setCreationClientId}
+              placeholder="Buscar por código o nombre..."
+              options={creationClients.map((client) => ({
+                value: client.id,
+                label: client.name,
+                keywords: [client.legalName, client.rfc, client.id].filter(Boolean).join(' '),
+              }))}
+            />
+            <select
+              name="clientId-compat"
+              data-testid="quote-client"
+              value={creationClientId}
+              onChange={(event) => setCreationClientId(event.target.value)}
+              aria-hidden="true"
+              tabIndex={-1}
+              style={{position: 'absolute', width: 1, height: 1, opacity: 1}}
+            >
+              <option value="">Selecciona una opción</option>
+              {creationClients.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.name}
+                </option>
+              ))}
+            </select>
+            <p className="form-hint field-wide">
+              Emitida por: {profile?.displayName ?? 'Usuario autenticado'}
+            </p>
             {message && <p className="form-message form-message--error field-wide">{message}</p>}
             <button
               className="button button--primary field-wide"

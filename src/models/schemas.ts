@@ -3,6 +3,15 @@ import {z} from 'zod';
 const shortText = z.string().trim().min(1).max(120);
 const optionalText = z.string().trim().max(2000).optional();
 const optionalContact = z.string().trim().max(160).optional();
+const optionalPostalCode = z
+  .union([
+    z
+      .string()
+      .trim()
+      .regex(/^\d{5}$/),
+    z.literal(''),
+  ])
+  .optional();
 
 export const emailSchema = z.string().trim().toLowerCase().email().max(254);
 
@@ -16,7 +25,7 @@ export const clientInputSchema = z.object({
   status: z.enum(['active', 'inactive']),
   notes: optionalText,
   addressFull: z.string().trim().max(500).optional(),
-  postalCode: z.union([z.string().regex(/^\d{5}$/), z.literal('')]).optional(),
+  postalCode: optionalPostalCode,
   billingAddress: z
     .object({
       street: z.string().trim().min(1).max(160),
@@ -25,7 +34,10 @@ export const clientInputSchema = z.object({
       neighborhood: z.string().trim().max(120).optional(),
       city: z.string().trim().min(1).max(100),
       state: z.string().trim().min(1).max(100),
-      postalCode: z.string().trim().min(4).max(10),
+      postalCode: z
+        .string()
+        .trim()
+        .regex(/^\d{5}$/),
       country: z.string().trim().min(1).max(80),
     })
     .optional(),
@@ -40,7 +52,10 @@ export const siteInputSchema = z.object({
     exteriorNumber: z.string().trim().max(20).optional(),
     city: z.string().trim().min(1).max(100),
     state: z.string().trim().min(1).max(100),
-    postalCode: z.string().trim().min(4).max(10),
+    postalCode: z
+      .string()
+      .trim()
+      .regex(/^\d{5}$/),
     country: z.string().trim().min(1).max(80),
   }),
   contactName: optionalContact,

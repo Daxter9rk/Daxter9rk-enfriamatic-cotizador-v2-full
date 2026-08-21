@@ -52,4 +52,13 @@ describe('runtime schemas', () => {
     ).toBe(false);
     expect(clientInputSchema.safeParse({name: 'Cliente', status: 'deleted'}).success).toBe(false);
   });
+
+  it('accepts a valid optional Mexican postal code and rejects malformed values', () => {
+    const base = {name: 'Cliente', status: 'active' as const};
+    expect(clientInputSchema.safeParse({...base, postalCode: '76175'}).success).toBe(true);
+    expect(clientInputSchema.safeParse({...base, postalCode: '7617'}).success).toBe(false);
+    expect(clientInputSchema.safeParse({...base, postalCode: '761750'}).success).toBe(false);
+    expect(clientInputSchema.safeParse({...base, postalCode: '76A75'}).success).toBe(false);
+    expect(clientInputSchema.safeParse(base).success).toBe(true);
+  });
 });

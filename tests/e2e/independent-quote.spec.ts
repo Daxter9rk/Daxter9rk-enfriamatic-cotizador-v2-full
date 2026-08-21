@@ -37,7 +37,8 @@ async function openIndependentQuote(page: Page) {
 
   await page.getByTestId('new-quote').click();
 
-  await page.getByTestId('quote-client').selectOption({label: 'Procesos Fríos del Bajío'});
+  await page.getByPlaceholder('Buscar por código o nombre...').click();
+  await page.locator('button[role="option"]', {hasText: 'Procesos Fríos del Bajío'}).click();
 
   await expect(page.locator('select[name="siteId"]')).toHaveCount(0);
   await expect(page.locator('select[name="equipmentId"]')).toHaveCount(0);
@@ -52,8 +53,6 @@ function getPreviewDialog(page: Page) {
 test('admin creates, edits, previews and reloads an independent quote', async ({page}) => {
   await login(page, credentials.admin);
   await openIndependentQuote(page);
-
-  await page.locator('select[name="assignedTo"]').selectOption('seed-operator-active');
 
   await page.getByRole('button', {name: 'Crear cotización'}).click();
 
@@ -240,9 +239,7 @@ test('admin creates, edits, previews and reloads an independent quote', async ({
   await expect(page.getByRole('dialog').locator('form.quote-context-form')).toHaveCount(0);
 });
 
-test('operator creates an independent quote assigned to self and cannot reassign it', async ({
-  page,
-}) => {
+test('operator creates an independent quote without manual assignment', async ({page}) => {
   await login(page, credentials.operator);
   await openIndependentQuote(page);
 

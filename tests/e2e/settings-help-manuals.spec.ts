@@ -43,15 +43,15 @@ test('admin can validate and persist authorized settings without changing docume
   await expect(page.getByText(/configuración guardada/i)).toBeVisible();
 });
 
-test('operator cannot open settings and receives only the operator manual', async ({page}) => {
+test('operator cannot open settings and receives the manual library', async ({page}) => {
   await login(page, 'operador@enfriamatic.local');
   await expect(page.getByRole('link', {name: 'Configuración'})).toHaveCount(0);
   await page.goto('/settings', {waitUntil: 'domcontentloaded'});
   await expect(page).toHaveURL(/\/$/);
   await page.goto('/manual', {waitUntil: 'domcontentloaded'});
-  await expect(page.getByRole('heading', {name: /manual de operador/i})).toBeVisible();
-  await expect(page.getByText('Restricciones del rol', {exact: true})).toBeVisible();
-  await expect(page.getByText('Usuarios y permisos')).toHaveCount(0);
+  await expect(page.getByRole('heading', {name: /biblioteca de manuales/i})).toBeVisible();
+  await expect(page.getByRole('heading', {name: /manual del operador/i})).toBeVisible();
+  await expect(page.getByRole('link', {name: /descargar pdf/i})).toHaveCount(3);
 });
 
 test('help and simulated support never claim external delivery', async ({page}) => {

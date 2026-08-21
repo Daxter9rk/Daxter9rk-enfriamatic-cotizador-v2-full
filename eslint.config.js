@@ -45,4 +45,12 @@ export default tseslint.config(
       '@typescript-eslint/no-base-to-string': 'off',
     },
   },
+  {
+    files: ['**/*.mjs'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: globals.node,
+    },
+  },
 );

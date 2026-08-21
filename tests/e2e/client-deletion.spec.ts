@@ -71,7 +71,7 @@ test('admin deletes dependency-free clients and deactivates historical clients',
     await expect(page.getByRole('button', {name: 'Eliminar cliente'})).toBeVisible();
     await page.getByRole('button', {name: 'Eliminar cliente'}).click();
     await page.getByRole('dialog').getByRole('button', {name: 'Eliminar cliente'}).click();
-    await expect(page.getByText(/registro no existe/i)).toBeVisible();
+    await expect(page).toHaveURL(/\/clients$/);
 
     await page.goto(`/clients/${historicalId}`);
     await expect(page.getByText(`COT-HIST-${suffix}`)).toBeVisible();

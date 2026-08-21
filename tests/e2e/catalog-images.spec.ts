@@ -338,7 +338,8 @@ test('commercial catalog UI persists a private image and keeps operator read-onl
     await expect(page.getByText('Inactivo', {exact: true}).first()).toBeVisible();
     await page.goto('/quotes');
     await page.getByTestId('new-quote').click();
-    await page.getByTestId('quote-client').selectOption({label: 'Procesos Fríos del Bajío'});
+    await page.getByPlaceholder('Buscar por código o nombre...').click();
+    await page.locator('button[role="option"]', {hasText: 'Procesos Fríos del Bajío'}).click();
     await page.getByRole('button', {name: 'Crear cotización'}).click();
     await expect(
       page.locator(`.quote-catalog button[aria-label="Agregar ${itemName}"]`),

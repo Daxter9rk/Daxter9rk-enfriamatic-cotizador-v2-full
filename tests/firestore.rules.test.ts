@@ -650,6 +650,7 @@ describe('Firestore rules — quotes and line items', () => {
       setDoc(doc(operatorDb, 'quotes/independent-operator'), {
         ...quote('operator', 'draft', false),
         requestId: null,
+        assignedTo: null,
         siteId: null,
         equipmentId: null,
         createdAt: serverTimestamp(),

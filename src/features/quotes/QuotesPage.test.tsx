@@ -38,17 +38,20 @@ describe('QuotesPage independent creation', () => {
     const user = userEvent.setup();
     render(<QuotesPage />);
     await user.click(screen.getByRole('button', {name: 'Nueva cotización'}));
-    expect(screen.getByTestId('quote-client')).toBeRequired();
+    expect(screen.getByTestId('clientId')).toBeRequired();
     expect(screen.queryByTestId('quote-request')).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox', {name: /Instalaci/})).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox', {name: /Equipo/})).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Referencia de servicio/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Contexto técnico/)).not.toBeInTheDocument();
     const creationDialog = screen.getByRole('dialog', {name: 'Nueva cotización'});
+    await user.click(within(creationDialog).getByTestId('clientId'));
     expect(within(creationDialog).getByRole('option', {name: 'Cliente demo'})).toBeVisible();
     expect(
       within(creationDialog).queryByRole('option', {name: 'Cliente histórico'}),
     ).not.toBeInTheDocument();
+    expect(within(creationDialog).getByText(/Emitida por/)).toBeVisible();
+    expect(within(creationDialog).queryByText(/Operador asignado/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', {name: 'Crear cotización'})).toBeVisible();
   });
 });

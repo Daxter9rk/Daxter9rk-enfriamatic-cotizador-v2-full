@@ -12,7 +12,10 @@ vi.mock('../../app/providers/AuthProvider', () => ({
   useAuth: () => ({profile: {uid: 'admin', role: state.role}}),
 }));
 vi.mock('../../components/Icon', () => ({Icon: () => null}));
-vi.mock('wouter', () => ({Link: ({children}: {children: ReactNode}) => <span>{children}</span>}));
+vi.mock('wouter', () => ({
+  Link: ({children}: {children: ReactNode}) => <span>{children}</span>,
+  useLocation: () => ['/clients/client-1', vi.fn()],
+}));
 vi.mock('../../hooks/useCollection', () => ({
   useCollection: () => ({data: [], loading: false, error: null, reload: vi.fn()}),
 }));

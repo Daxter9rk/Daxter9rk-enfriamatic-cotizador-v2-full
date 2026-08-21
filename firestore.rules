@@ -483,7 +483,18 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     function canReadQuote(data) {
       return isAdmin()
-        || (isOperator() && data.assignedTo == request.auth.uid);
+        || (isOperator() && data.assignedTo == request.auth.uid)
+        || (isOperator()
+          && data.requestId == null
+          && request.auth.uid in get(
+            /databases/$(database)/documents/clients/$(data.clientId)
+          ).data.operatorIds);
+    }
+
+    function canReadIndependentOwnedQuote(data) {
+      return isAdmin()
+        || (isOperator() && data.assignedTo == request.auth.uid)
+        || (isOperator() && data.requestId == null && data.createdBy == request.auth.uid);
     }
 
     function validMoney(value) {
@@ -660,7 +671,10 @@ service cloud.firestore {
               isAdmin()
               || (
                 isOperator()
-                && request.resource.data.assignedTo == request.auth.uid
+                && (
+                  request.resource.data.assignedTo == null
+                  || request.resource.data.assignedTo == request.auth.uid
+                )
               )
             )
             && validCreateAudit(request.resource.data)
@@ -778,6 +792,32 @@ service cloud.firestore {
           && selected.taxable == data.catalogSnapshot.taxable;
       }
 
+      // Keep the operator-owned independent draft path below the emulator's
+      // expression budget while preserving the security-critical snapshot
+      // identity, active catalog status, price and taxability checks.
+      function validOperatorCatalogItem(data) {
+        let selected = get(
+          /databases/$(database)/documents/catalogItems/$(data.catalogItemId)
+        ).data;
+        return data.catalogItemId is string
+          && data.catalogItemId == data.catalogCode
+          && exists(/databases/$(database)/documents/catalogItems/$(data.catalogItemId))
+          && selected.status == 'active'
+          && selected.code == data.catalogCode
+          && selected.type == data.catalogType
+          && data.catalogSnapshot is map
+          && data.catalogSnapshot.code == selected.code
+          && data.catalogSnapshot.type == selected.type
+          && data.catalogSnapshot.basePrice == selected.basePrice
+          && data.catalogSnapshot.taxable == selected.taxable
+          && data.quantity is number && data.quantity > 0
+          && data.description is string && data.description.size() > 0
+          && data.originalUnitPrice is number && data.originalUnitPrice >= 0
+          && data.discountType in ['none', 'percentage', 'fixed']
+          && data.createdAt == request.time
+          && data.updatedAt == request.time;
+      }
+
       function editableParentQuote() {
         let quote = get(
           /databases/$(database)/documents/quotes/$(quoteId)
@@ -787,23 +827,42 @@ service cloud.firestore {
           && canReadQuote(quote);
       }
 
+      function editableIndependentOwnedQuote() {
+        let quote = get(
+          /databases/$(database)/documents/quotes/$(quoteId)
+        ).data;
+        return quote.status == 'draft'
+          && quote.locked == false
+          && quote.requestId == null
+          && isOperator()
+          && quote.createdBy == request.auth.uid;
+      }
+
       match /items/{itemId} {
-        allow get: if isActiveUser() && canReadQuote(
+        allow get: if isActiveUser() && canReadIndependentOwnedQuote(
           get(/databases/$(database)/documents/quotes/$(quoteId)).data
         );
         allow list: if isActiveUser()
-          && canReadQuote(
+          && canReadIndependentOwnedQuote(
             get(/databases/$(database)/documents/quotes/$(quoteId)).data
           )
           && boundedList(100);
-        allow create: if editableParentQuote()
-          && validQuoteItem(request.resource.data)
-          && (
-            isManualCatalogSelection(request.resource.data)
-            || validCatalogSelectionOnCreate(request.resource.data)
-          )
-          && request.resource.data.createdAt == request.time
-          && request.resource.data.updatedAt == request.time;
+        allow create: if isOperator()
+          ? (request.resource.data.keys().hasAny([
+              'catalogItemId', 'catalogCode', 'catalogType', 'catalogSnapshot'
+            ])
+            ? ((editableIndependentOwnedQuote() || editableParentQuote())
+              && validOperatorCatalogItem(request.resource.data))
+            : (editableParentQuote()
+              && validQuoteItem(request.resource.data)
+              && request.resource.data.createdAt == request.time
+              && request.resource.data.updatedAt == request.time))
+          : (editableParentQuote()
+            && validQuoteItem(request.resource.data)
+            && (isManualCatalogSelection(request.resource.data)
+              || validCatalogSelectionOnCreate(request.resource.data))
+            && request.resource.data.createdAt == request.time
+            && request.resource.data.updatedAt == request.time);
         allow update: if editableParentQuote()
           && validQuoteItem(request.resource.data)
           && !request.resource.data.diff(resource.data).affectedKeys().hasAny([

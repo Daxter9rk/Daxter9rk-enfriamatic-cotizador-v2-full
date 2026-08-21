@@ -67,6 +67,7 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
   const [editing, setEditing] = useState<MasterRecord | 'new' | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [view, setView] = useState<'cards' | 'list' | 'table'>(
     () =>
       (localStorage.getItem(`enfriamatic-view-${kind}`) as 'cards' | 'list' | 'table') ?? 'cards',
@@ -85,6 +86,15 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
       if (record) setEditing(record);
     }
   }, [records.data, searchQuery, profile]);
+
+  useEffect(() => {
+    if (kind !== 'clients') return;
+    const notice = sessionStorage.getItem('enfriamatic:client-action-notice');
+    if (notice) {
+      setActionNotice(notice);
+      sessionStorage.removeItem('enfriamatic:client-action-notice');
+    }
+  }, [kind]);
 
   const closeEditor = () => {
     setEditing(null);
@@ -177,6 +187,11 @@ export function MasterDataPage({kind}: {kind: EntityKind}) {
           ) : undefined
         }
       />
+      {actionNotice && (
+        <p className="form-message form-message--success" role="status">
+          {actionNotice}
+        </p>
+      )}
       <FilterBar
         search={search}
         searchPlaceholder="Nombre, categoría, marca…"
@@ -455,6 +470,7 @@ function MasterForm({
           maxLength={120}
           defaultValue={value?.name ?? ''}
           data-testid={`${kind}-name`}
+          placeholder={kind === 'clients' ? 'Ej. Procesos Fríos del Bajío' : 'Ej. Planta Querétaro'}
         />
       </label>
       {kind === 'clients' && (
@@ -465,6 +481,7 @@ function MasterForm({
               name="legalName"
               maxLength={160}
               defaultValue={value && 'legalName' in value ? value.legalName : ''}
+              placeholder="Ej. Procesos Fríos del Bajío, S.A. de C.V."
             />
           </label>
           <label>
@@ -473,6 +490,7 @@ function MasterForm({
               name="rfc"
               maxLength={13}
               defaultValue={value && 'rfc' in value ? value.rfc : ''}
+              placeholder="Ej. PFB260101AB1"
             />
           </label>
           <label>
@@ -481,6 +499,7 @@ function MasterForm({
               name="contactName"
               maxLength={160}
               defaultValue={value && 'contactName' in value ? value.contactName : ''}
+              placeholder="Ej. José García"
             />
           </label>
           <label>
@@ -490,6 +509,7 @@ function MasterForm({
               name="email"
               maxLength={254}
               defaultValue={value && 'email' in value ? value.email : ''}
+              placeholder="Ej. contacto@empresa.com"
             />
           </label>
           <label>
@@ -498,6 +518,7 @@ function MasterForm({
               name="phone"
               maxLength={30}
               defaultValue={value && 'phone' in value ? value.phone : ''}
+              placeholder="Ej. 442 123 4567"
             />
           </label>
           <label className="field-wide">
@@ -506,6 +527,7 @@ function MasterForm({
               name="notes"
               maxLength={2000}
               defaultValue={value && 'notes' in value ? value.notes : ''}
+              placeholder="Agrega indicaciones comerciales o técnicas relevantes"
             />
           </label>
           <h3 className="field-wide form-section-title">
@@ -527,7 +549,7 @@ function MasterForm({
             <input
               name="postalCode"
               inputMode="numeric"
-              pattern="\\d{5}"
+              pattern="[0-9]{5}"
               maxLength={5}
               defaultValue={
                 value && 'postalCode' in value
@@ -536,6 +558,7 @@ function MasterForm({
                     ? value.billingAddress?.postalCode
                     : ''
               }
+              placeholder="Ej. 76175"
             />
           </label>
         </>
@@ -545,6 +568,7 @@ function MasterForm({
           <label>
             Tipo
             <select name="type" defaultValue={value && 'type' in value ? value.type : 'plant'}>
+              <option value="">Selecciona una opción</option>
               <option value="plant">Planta</option>
               <option value="ranch">Rancho</option>
               <option value="branch">Sucursal</option>
@@ -559,6 +583,7 @@ function MasterForm({
               required
               maxLength={160}
               defaultValue={value && 'address' in value ? value.address.street : ''}
+              placeholder="Ej. Av. Industrial 125"
             />
           </label>
           <label>
@@ -576,6 +601,7 @@ function MasterForm({
               required
               maxLength={100}
               defaultValue={value && 'address' in value ? value.address.city : ''}
+              placeholder="Ej. Querétaro"
             />
           </label>
           <label>
@@ -585,6 +611,7 @@ function MasterForm({
               required
               maxLength={100}
               defaultValue={value && 'address' in value ? value.address.state : ''}
+              placeholder="Ej. Querétaro"
             />
           </label>
           <label>
@@ -592,8 +619,12 @@ function MasterForm({
             <input
               name="postalCode"
               required
-              maxLength={10}
+              maxLength={5}
               defaultValue={value && 'address' in value ? value.address.postalCode : ''}
+              placeholder="Ej. 76175"
+              pattern="[0-9]{5}"
+              inputMode="numeric"
+              minLength={5}
             />
           </label>
           <label>

@@ -67,7 +67,8 @@ test('flujo integral catálogo → cotización → PDF → sent → accepted →
     .getByRole('link', {name: 'Cotizaciones', exact: true})
     .click();
   await page.getByTestId('new-quote').click();
-  await page.getByTestId('quote-client').selectOption({label: clientName});
+  await page.getByPlaceholder('Buscar por código o nombre...').click();
+  await page.locator('button[role="option"]', {hasText: clientName}).click();
   await page.getByRole('button', {name: 'Crear cotización'}).click();
 
   await page.getByRole('button', {name: 'Agregar Compresor emulador'}).click();

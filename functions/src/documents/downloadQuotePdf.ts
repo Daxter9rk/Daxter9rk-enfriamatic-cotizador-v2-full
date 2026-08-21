@@ -38,7 +38,7 @@ export const downloadQuotePdf = onCall(
       if (quote.siteId != null || quote.equipmentId != null) {
         throw new HttpsError('data-loss', 'The independent quote contains operational references.');
       }
-      if (actor.role === 'operator' && quote.assignedTo !== actor.uid) {
+      if (actor.role === 'operator' && quote.assignedTo != null && quote.assignedTo !== actor.uid) {
         throw new HttpsError('permission-denied', 'The document is not assigned to this operator.');
       }
     } else {

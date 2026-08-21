@@ -2,6 +2,7 @@ import {useEffect, useMemo, useRef, useState, type FormEvent} from 'react';
 import {Link} from 'wouter';
 import logoUrl from '../../assets/brand/enfriamatic-logo-transparent.png';
 import {Modal} from '../../components/Modal';
+import {BinarySwitch} from '../../components/BinarySwitch';
 import type {
   CatalogItem,
   Client,
@@ -482,19 +483,14 @@ export function QuoteEditor({
                         }}
                       />
                     </label>
-                    <label className="tax-switch">
-                      <input
-                        role="switch"
-                        type="checkbox"
-                        checked={applyTax}
-                        onChange={(event) => {
-                          const value = event.target.checked;
-                          setApplyTax(value);
-                          void persistTotals({applyTax: value});
-                        }}
-                      />
-                      <span>Aplicar IVA {quote.taxRate ? `${quote.taxRate * 100} %` : '16 %'}</span>
-                    </label>
+                    <BinarySwitch
+                      checked={applyTax}
+                      label={`Aplicar IVA ${quote.taxRate ? `${quote.taxRate * 100} %` : '16 %'}`}
+                      onChange={(value) => {
+                        setApplyTax(value);
+                        void persistTotals({applyTax: value});
+                      }}
+                    />
                     <small>
                       Descuento calculado: {formatCurrency(totals.globalDiscountAmount ?? 0)}
                     </small>
@@ -515,10 +511,11 @@ export function QuoteEditor({
               {quote.locked && (
                 <fieldset className="field-wide quote-calculation-settings">
                   <legend>Configuración fiscal</legend>
-                  <label className="tax-switch">
-                    <input role="switch" type="checkbox" checked={applyTax} disabled readOnly />
-                    <span>Aplicar IVA {quote.taxRate ? `${quote.taxRate * 100} %` : '16 %'}</span>
-                  </label>
+                  <BinarySwitch
+                    checked={applyTax}
+                    disabled
+                    label={`Aplicar IVA ${quote.taxRate ? `${quote.taxRate * 100} %` : '16 %'}`}
+                  />
                 </fieldset>
               )}
               <div className="quote-items">
@@ -792,7 +789,7 @@ function Totals({
       </div>
       <div>
         <span>Descuento</span>
-        <strong>-{formatCurrency(totals.discountTotal)}</strong>
+        <strong>{formatCurrency(-totals.discountTotal)}</strong>
       </div>
       <div>
         <span>Subtotal después de partidas</span>
@@ -800,7 +797,7 @@ function Totals({
       </div>
       <div>
         <span>Descuento global</span>
-        <strong>-{formatCurrency(totals.globalDiscountAmount ?? 0)}</strong>
+        <strong>{formatCurrency(-(totals.globalDiscountAmount ?? 0))}</strong>
       </div>
       <div>
         <span>Base antes de IVA</span>
@@ -1010,19 +1007,21 @@ function Preview({
         }
       }}
     >
-      <button
-        ref={closeButtonRef}
-        className="icon-button"
-        aria-label="Cerrar vista previa"
-        onClick={onClose}
-      >
-        ×
-      </button>
       <section className="quote-preview-pages" aria-label="Vista previa del documento">
         {pages.map((pageItems, pageIndex) => (
           <article className="quote-preview" key={pageIndex}>
             <span className="quote-preview__watermark">DOCUMENTO DE PRUEBA DEV</span>
             <header className="quote-preview__header">
+              {pageIndex === 0 && (
+                <button
+                  ref={closeButtonRef}
+                  className="icon-button quote-preview__close"
+                  aria-label="Cerrar vista previa"
+                  onClick={onClose}
+                >
+                  ×
+                </button>
+              )}
               <div>
                 <img className="quote-preview__logo" src={logoUrl} alt="Enfriamatic" />
                 <small>Cotizador V2.1</small>
