@@ -410,22 +410,6 @@ export function QuotesPage() {
                 keywords: [client.legalName, client.rfc, client.id].filter(Boolean).join(' '),
               }))}
             />
-            <select
-              name="clientId-compat"
-              data-testid="quote-client"
-              value={creationClientId}
-              onChange={(event) => setCreationClientId(event.target.value)}
-              aria-hidden="true"
-              tabIndex={-1}
-              style={{position: 'absolute', width: 1, height: 1, opacity: 1}}
-            >
-              <option value="">Selecciona una opción</option>
-              {creationClients.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.name}
-                </option>
-              ))}
-            </select>
             <p className="form-hint field-wide">
               Emitida por: {profile?.displayName ?? 'Usuario autenticado'}
             </p>
